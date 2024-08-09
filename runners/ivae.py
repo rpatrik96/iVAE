@@ -17,8 +17,11 @@ def runner(args, config):
 
     factor = config.gamma > 0
 
+    print("------Layer override in DGP num_layer=1------")
+    config.nl = 1
+
     dset = SyntheticDataset(args.data_path, config.nps, config.ns, config.dl, config.dd, config.nl, config.s, config.p,
-                            config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor)
+                            config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor, use_sem=True, one_hot_labels=config.one_hot_labels)
     d_data, d_latent, d_aux = dset.get_dims()
 
     loader_params = {'num_workers': 6, 'pin_memory': True} if torch.cuda.is_available() else {}
@@ -31,7 +34,7 @@ def runner(args, config):
     for seed in range(args.seed, args.seed + args.n_sims):
         if config.ica:
             model = cleanIVAE(data_dim=d_data, latent_dim=d_latent, aux_dim=d_aux, hidden_dim=config.hidden_dim,
-                              n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)
+                              n_layers=config.n_layers, activation=config.activation, slope=.1, use_strnn=config.use_strnn, separate_aux=config.separate_aux, residual_aux=config.residual_aux).to(config.device)
         else:
             model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
                              n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)

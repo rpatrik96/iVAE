@@ -1,16 +1,22 @@
 # dataset
 nps: 1000
-ns: 40
+ns: 10  # -> for a small amount of segments, StrNN seem to work better
 dl: 5
 dd: 5
-nl: 3
+nl: 1
 s: 1
 p: 'gauss'
 act: 'xtanh'
 uncentered: false
 noisy: false
 staircase: false
+one_hot_labels: true
 
+# IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
+# residual StrNNs help when labels are not one-hot
+# for one-hot labels, the aux MLP needs more layers
+# 100 is too wide for strnns, 40 works better
+# non-residual aux works better than iVAE on non one-hot labels and SLIGHTLY better on one-hot labels
 # model args
 n_layers: 3
 hidden_dim: 100
@@ -19,6 +25,9 @@ ica: true
 initialize: true
 batch_norm: false
 tcl: false
+use_strnn: false
+separate_aux: true
+residual_aux: false
 
 # learning
 a: 100

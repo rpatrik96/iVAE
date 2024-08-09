@@ -58,8 +58,10 @@ def main():
     torch.manual_seed(args.seed)
 
     if new_config.tcl:
+        print("Running TCL")
         r = tcl_runner(args, new_config)
     else:
+        print("Running iVAE")
         r = ivae_runner(args, new_config)
     # r = clean_vae_runner(args, new_config)
     fname = os.path.join(args.run,

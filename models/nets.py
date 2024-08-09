@@ -121,8 +121,20 @@ class MLP(nn.Module):
         return h
 
 
+class ResidualStrNN(nn.Module):
+    def __init__(self, strnn, mlp):
+        super().__init__()
+        self.strnn = strnn
+        self.mlp = mlp
+
+    def forward(self, x,u):
+       mlp_u = self.mlp(u)
+       return self.strnn(x*mlp_u+ mlp_u)
+
+
 class cleanIVAE(nn.Module):
-    def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1):
+    def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1,
+                 use_strnn=False, separate_aux=False, residual_aux=False):
         super().__init__()
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -139,7 +151,84 @@ class cleanIVAE(nn.Module):
         self.f = MLP(latent_dim, data_dim, hidden_dim, n_layers, activation=activation, slope=slope)
         self.decoder_var = .1 * torch.ones(1)
         # encoder params
-        self.g = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+
+        self.sep_aux = separate_aux
+        self.residual_aux = residual_aux
+        self.use_strnn = use_strnn
+
+        if use_strnn is False:
+            self.g = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+        else:
+            print("----------------------")
+            print("Using StrNN")
+            print("----------------------")
+            print(f"{aux_dim=}")
+
+            # mlp = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers-1, activation=activation, slope=slope)
+
+            from strnn.models.strNN import StrNN
+
+            if separate_aux is False:
+                adjacency = torch.tril(
+                    torch.ones(latent_dim+ aux_dim,
+                               latent_dim+ aux_dim)
+                ).numpy()
+
+                adjacency[:, latent_dim:] = 1.
+                adjacency[latent_dim:, :] = 1.
+
+                hidden_sizes = [
+                    (1 * hidden_dim) for _ in range(3)
+                ]
+
+                strnn = StrNN(
+                    nin=latent_dim + aux_dim,
+                    hidden_sizes=(tuple(hidden_sizes)),
+                    nout=latent_dim + aux_dim,
+                    opt_type="greedy",
+                    adjacency=adjacency,
+                    activation="leaky_relu",
+                    init_type="ian_uniform",
+                    # norm_type="batch",
+                )
+                self.g = strnn
+            else:
+                adjacency = torch.tril(
+                    torch.ones(latent_dim,
+                               latent_dim)
+                ).numpy()
+
+                if self.residual_aux:
+                    aux_net = MLP(aux_dim, latent_dim, hidden_dim, 3, activation=activation, slope=slope)
+                    hidden_sizes = [
+                        40 for _ in range(3)
+                    ]
+                else:
+                    aux_net = MLP(aux_dim+latent_dim, latent_dim, hidden_dim, 1, activation=activation, slope=slope)
+
+                    hidden_sizes = [
+                        40 for _ in range(2)
+                    ]
+
+                strnn = StrNN(
+                    nin=latent_dim,
+                    hidden_sizes=(tuple(hidden_sizes)),
+                    nout=latent_dim ,
+                    opt_type="greedy",
+                    adjacency=adjacency,
+                    activation="leaky_relu",
+                    init_type="ian_uniform",
+                    # norm_type="batch",
+                )
+
+
+                if self.residual_aux:
+                    self.g = ResidualStrNN(strnn, aux_net)
+                else:
+                    self.g = nn.Sequential(*[aux_net, strnn])
+                # self.g = ResidualStrNN(strnn, aux_net)
+
+
         self.logv = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
 
     @staticmethod
@@ -150,7 +239,16 @@ class cleanIVAE(nn.Module):
 
     def encoder(self, x, u):
         xu = torch.cat((x, u), 1)
-        g = self.g(xu)
+        if self.use_strnn is False:
+            g = self.g(xu)
+        else:
+            if self.sep_aux is False:
+                g = self.g(xu)[:, :self.latent_dim]
+            else:
+                if self.residual_aux:
+                    g = self.g(x, u)
+                else:
+                    g = self.g(xu)
         logv = self.logv(xu)
         return g, logv.exp()
 
