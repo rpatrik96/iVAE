@@ -5,7 +5,7 @@ command:
 method: grid
 metric:
   goal: minimize
-  name: val_loss
+  name: train_loss
 parameters:
   tcl:
     value: false

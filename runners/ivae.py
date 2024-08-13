@@ -2,6 +2,7 @@ import time
 
 import torch
 import torch.nn.functional as F
+import wandb
 from torch import optim
 from torch.utils.data import DataLoader
 
@@ -114,6 +115,8 @@ def runner(args, config):
         loss_hist.append(train_loss)
         print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
                                                                                 train_perf))
+
+        wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
 
         if not config.no_scheduler:
             scheduler.step(train_loss)

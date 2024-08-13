@@ -14,7 +14,7 @@ from runners import ivae_runner, tcl_runner
 def parse():
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('--config', type=str, default='ivae.yaml', help='Path to the config file')
+    parser.add_argument('--config', type=str, default='ivae_sweep.yaml', help='Path to the config file')
     parser.add_argument('--run', type=str, default='run', help='Path for saving running related data.')
     parser.add_argument('--doc', type=str, default='', help='A string for documentation purpose')
 
@@ -94,7 +94,7 @@ if __name__ == '__main__':
     args = parse()
 
     # Set up your default hyperparameters
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs/ivae_sweep.yaml")) as file:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"configs/{args.config}")) as file:
         config = yaml.load(file, Loader=yaml.FullLoader)
 
 
