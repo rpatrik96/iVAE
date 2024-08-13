@@ -45,8 +45,12 @@ parameters:
   # model args
   n_layers:
     value: 3
+  strnn_layers:
+    value: 2
   hidden_dim:
     value: 100
+  strnn_width:
+    value: 40
   activation:
     value: 'xtanh'
   ica:
