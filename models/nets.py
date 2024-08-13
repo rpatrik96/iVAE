@@ -6,10 +6,209 @@ from torch import distributions as dist
 from torch import nn
 from torch.nn import functional as F
 
-
+import warnings
 def weights_init(m):
     if isinstance(m, nn.Linear):
         nn.init.xavier_uniform_(m.weight.data)
+
+
+from strnn import MaskedLinear, StrNN
+from strnn.models.strNN import OPT_MAP, check_masks
+
+class ConditionedMaskedLinear(MaskedLinear):
+    def __init__(self, in_features, out_features, cond_features, init, activation, bias=False):
+        super().__init__(in_features, out_features, init, activation)
+
+
+        self.cond_features = cond_features
+        self.cond_net = nn.Linear(cond_features, in_features, bias=True)
+
+        self.cond_bias = nn.Linear(cond_features, in_features, bias=True)
+
+    def forward(self, x,u):
+        # x, u = xu[:, :self.in_features], xu[:, self.in_features:]
+        cond_mask = self.cond_net(u) #.view(x.shape[0], self.out_features, self.in_features)
+
+        # (bs, out, in)
+        # batched_mask = F.sigmoid(cond_mask)*self.mask
+        # einsum (bs, out, in) x (bs, in) -> (bs, out)
+        # result = torch.einsum('boi,bi->bo', batched_mask, x)
+        # return result +  self.bias + self.cond_bias(u)
+
+        return F.linear(x*cond_mask + self.cond_bias(u), self.mask *self.weight, self.bias )
+
+from strnn.models.model_utils import NONLINEARITIES
+from strnn.models.adaptive_layer_norm import AdaptiveLayerNorm
+
+class ConditionalStrNN(nn.Module):
+    """Main neural network class that implements a Structured Neural Network.
+
+    Can also become a MADE or Zuko masked NN by specifying the opt_type flag
+    """
+
+    def __init__(
+            self,
+            nin: int,
+            hidden_sizes: tuple[int, ...],
+            cond_features: int,
+            nout: int,
+            opt_type: str = "greedy",
+            opt_args: dict = {"var_penalty_weight": 0.0},
+            precomputed_masks: np.ndarray | None = None,
+            adjacency: np.ndarray | None = None,
+            activation: str = "relu",
+            init_type: str = 'ian_uniform',
+            norm_type: str | None = None,
+            layer_norm_inverse: bool | None = None,
+            init_gamma: float | None = None,
+            # min_gamma: float | None = None,
+            max_gamma: float | None = None,
+            anneal_rate: float | None = None,
+            anneal_method: str | None = None,
+            wp: float | None = None,
+    ):
+        """Initialize a Structured Neural Network (StrNN).
+
+        Args:
+            nin: input dimension
+            hidden_sizes: list of hidden layer sizes
+            nout: output dimension
+            opt_type: optimization type: greedy, zuko, MADE
+            opt_args: additional optimization algorithm params
+            precomputed_masks: previously stored masks, use directly
+            adjacency: the adjacency matrix, nout by nin
+            activation: activation function to use in this NN
+            init_type: initialization scheme for weights
+            norm_type: normalization type: layer, batch, adaptive_layer
+            gamma: temperature parameter for adaptive layer normalization
+            wp: weight parameter for adaptive layer normalization
+        """
+        super().__init__()
+
+        # Set parameters
+        self.nin = nin
+        self.hidden_sizes = hidden_sizes
+        self.nout = nout
+
+        # Define activation
+        try:
+            self.activation = NONLINEARITIES[activation]
+        except ValueError:
+            raise ValueError(f"{activation} is not a valid activation!")
+
+        # Set up initialization and normalization schemes
+        self.init_type = init_type
+        self.norm_type = norm_type
+        self.layer_norm_inverse = layer_norm_inverse
+        self.init_gamma = init_gamma
+        # self.min_gamma = min_gamma
+        self.max_gamma = max_gamma
+        self.anneal_rate = anneal_rate
+        self.anneal_method = anneal_method
+        self.wp = wp
+
+        # Define StrNN network
+        self.net_list = []
+        hs = [nin] + list(hidden_sizes) + [nout]  # list of all layer sizes
+
+        # Create MaskedLinear and normalizations for each hidden layer
+        for h0, h1 in zip(hs[:-1], hs[1:-1]):
+            self.net_list.append(ConditionedMaskedLinear(h0, h1, cond_features, self.init_type, activation))
+
+            # Add normalization layer
+            if norm_type == 'layer':
+                self.net_list.append(nn.LayerNorm(h1))
+            elif norm_type == 'batch':
+                self.net_list.append(nn.BatchNorm1d(h1))
+            elif norm_type == 'adaptive_layer':
+                self.net_list.append(AdaptiveLayerNorm(self.wp, self.layer_norm_inverse))
+            else:
+                if norm_type is not None:
+                    raise ValueError(f"Invalid normalization type: {norm_type}")
+
+            # Add the activation function
+            self.net_list.append(NONLINEARITIES[activation])
+
+        # Last layer: no normalization or activation
+        self.net_list.append(ConditionedMaskedLinear(hs[-2], hs[-1], cond_features, self.init_type, activation))
+
+        self.net = nn.Sequential(*self.net_list)
+
+        # Load adjacency matrix
+        self.opt_type = opt_type.lower()
+        self.opt_args = opt_args
+
+        if adjacency is not None:
+            self.A = adjacency
+        else:
+            if self.opt_type == "made":
+                # Initialize adjacency structure to fully autoregressive
+                warnings.warn(("Adjacency matrix is unspecified, defaulting to"
+                               " fully autoregressive structure."))
+                self.A = np.tril(np.ones((nout, nin)), -1)
+            else:
+                raise ValueError(("Adjacency matrix must be specified if"
+                                  " factorizer is not MADE."))
+
+        # Setup adjacency factorizer
+        try:
+            self.factorizer = OPT_MAP[self.opt_type](self.A, self.opt_args)
+        except ValueError:
+            raise ValueError(f"{opt_type} is not a valid opt_type!")
+
+        self.precomputed_masks = precomputed_masks
+
+        # Update masks
+        self.update_masks()
+
+    def forward(self, x: torch.Tensor, u) -> torch.Tensor:
+        """Propagates the input forward through the StrNN network.
+
+        Args:
+            x: Input of size (sample_size by data_dimensions)
+        Returns:
+            Output of size (sample_size by output_dimensions)
+        """
+        # TODO: Add gamma
+        for layer in self.net_list:
+            if isinstance(layer, ConditionedMaskedLinear):
+                x = layer(x,u)
+
+        return x
+
+
+    def update_masks(self):
+        """Update masked linear layer masks to respect adjacency matrix."""
+        if self.precomputed_masks is not None:
+            # Load precomputed masks if provided
+            masks = self.precomputed_masks
+        else:
+            masks = self.factorizer.factorize(self.hidden_sizes)
+
+        self.masks = masks
+        assert check_masks(masks, self.A), "Mask check failed!"
+
+        # For when each input produces multiple outputs
+        # e.g. each x_i gives mean and variance for Gaussian density estimation
+        if self.nout != self.A.shape[0]:
+            # Then nout should be an exact multiple of nin
+            assert self.nout % self.nin == 0
+            k = int(self.nout / self.nin)
+            # replicate the mask across the other outputs
+            masks[-1] = np.concatenate([masks[-1]] * k, axis=1)
+
+        # Set the masks in all MaskedLinear layers
+        mask_idx = 0
+
+        mask_so_far = self.masks[0].T
+        for layer in self.net:
+            if isinstance(layer, ConditionedMaskedLinear):
+                layer.set_mask(self.masks[mask_idx])
+                if mask_idx > 0:
+                    mask_so_far = self.masks[mask_idx].T @ mask_so_far
+                mask_idx += 1
+            elif isinstance(layer, AdaptiveLayerNorm):
+                layer.set_mask(mask_so_far)
 
 
 def _check_inputs(size, mu, v):
@@ -198,6 +397,10 @@ class cleanIVAE(nn.Module):
                                latent_dim)
                 ).numpy()
 
+                # make it a chain
+                adjacency = np.tril(adjacency.T, k=1).T
+
+
                 if self.residual_aux:
                     aux_net = MLP(aux_dim, latent_dim, hidden_dim, 3, activation=activation, slope=slope)
                     hidden_sizes = [
@@ -220,12 +423,25 @@ class cleanIVAE(nn.Module):
                     init_type="ian_uniform",
                     # norm_type="batch",
                 )
+                #
+                # strnn = ConditionalStrNN(
+                #     nin=latent_dim,
+                #     hidden_sizes=(tuple(hidden_sizes)),
+                #     cond_features=aux_dim,
+                #     nout=latent_dim,
+                #     opt_type="greedy",
+                #     adjacency=adjacency,
+                #     activation="leaky_relu",
+                #     init_type="ian_uniform",
+                #     # norm_type="batch",
+                # )
 
 
                 if self.residual_aux:
                     self.g = ResidualStrNN(strnn, aux_net)
                 else:
-                    self.g = nn.Sequential(*[aux_net, strnn])
+                    # self.g = strnn
+                    self.g =  nn.Sequential(*[aux_net, strnn])
                 # self.g = ResidualStrNN(strnn, aux_net)
 
 

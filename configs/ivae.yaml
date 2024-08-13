@@ -10,13 +10,15 @@ act: 'xtanh'
 uncentered: false
 noisy: false
 staircase: false
-one_hot_labels: true
+one_hot_labels: false
+chain: false
 
 # IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
 # residual StrNNs help when labels are not one-hot
 # for one-hot labels, the aux MLP needs more layers
 # 100 is too wide for strnns, 40 works better
 # non-residual aux works better than iVAE on non one-hot labels and SLIGHTLY better on one-hot labels
+# for a chain, StrNN works faster, and is better with one-hot (non-one-hot is only faster, but same perf)
 # model args
 n_layers: 3
 hidden_dim: 100
@@ -25,7 +27,7 @@ ica: true
 initialize: true
 batch_norm: false
 tcl: false
-use_strnn: false
+use_strnn: true
 separate_aux: true
 residual_aux: false
 

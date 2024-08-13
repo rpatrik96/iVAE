@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import torch
 import yaml
+import wandb
 
 from runners import ivae_runner, tcl_runner
 
@@ -57,17 +58,46 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
+
     if new_config.tcl:
         print("Running TCL")
         r = tcl_runner(args, new_config)
     else:
         print("Running iVAE")
         r = ivae_runner(args, new_config)
+
+
     # r = clean_vae_runner(args, new_config)
     fname = os.path.join(args.run,
                          '_'.join([os.path.splitext(args.config)[0], str(args.seed), str(args.n_sims)]) + '.p')
     pickle.dump(r, open(fname, "wb"))
 
+def main_sweep():
+
+
+    run = wandb.init()
+
+
+    wandb.config["device"] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+    np.random.seed(wandb.config.seed)
+    torch.manual_seed(wandb.config.seed)
+
+    if wandb.config.tcl:
+        print("Running TCL")
+        r = tcl_runner(args, wandb.config)
+    else:
+        print("Running iVAE")
+        r = ivae_runner(args, wandb.config)
 
 if __name__ == '__main__':
-    sys.exit(main())
+    args = parse()
+
+    # Set up your default hyperparameters
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "configs/ivae_sweep.yaml")) as file:
+        config = yaml.load(file, Loader=yaml.FullLoader)
+
+
+    sweep_id = wandb.sweep(config)
+
+    wandb.agent(sweep_id, function=main_sweep)

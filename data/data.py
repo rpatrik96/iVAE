@@ -200,7 +200,7 @@ def generate_nonstationary_sources(n_per_seg: int, n_seg: int, d: int, prior='ga
 def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='gauss', activation='lrelu', batch_size=0,
                   seed=10, slope=.1, var_bounds=np.array([0.5, 3]), lin_type='uniform', n_iter_4_cond=1e4,
                   dtype=np.float32, noisy=0, uncentered=False, centers=None, staircase=False, discrete=False,
-                  one_hot_labels=True, repeat_linearity=False, use_sem=False):
+                  one_hot_labels=True, repeat_linearity=False, use_sem=False, chain=False):
     """
     Generate artificial data with arbitrary mixing
     @param int n_per_seg: number of observations per segment
@@ -261,7 +261,10 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
             A = generate_mixing_matrix(X.shape[1], d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
                                        staircase=staircase)
             if use_sem and n_layers==1:
-                A = np.tril(A)
+                # the transpose is needed due to the dot product used below
+                A = np.tril(A).T
+                if chain:
+                    A = np.tril(A, k=1)
 
                 print("using SEM")
                 print(f"{A=}")
@@ -275,9 +278,15 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         # assert n_layers > 1  # suppose we always have at least 2 layers. The last layer doesn't have a non-linearity
         A = generate_mixing_matrix(d_sources, d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
         if use_sem:
-            A = np.tril(A)
+            # the transpose is needed due to the dot product used below
+            A = np.tril(A).T
+            if chain:
+                A = np.tril(A, k=1)
+
             print("using SEM")
             print(f"{A=}")
+
+
         X = act_f(np.dot(S, A))
         if d_sources != d_data:
             B = generate_mixing_matrix(d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
@@ -328,10 +337,15 @@ def save_data(path, *args, **kwargs):
 
 class SyntheticDataset(Dataset):
     def __init__(self, root, nps, ns, dl, dd, num_layers, s, p, a, uncentered=False, noisy=False, centers=None,
-                 double=False, one_hot_labels=True, use_sem=False):
+                 double=False, one_hot_labels=True, use_sem=False, chain=False):
         self.root = root
+
+        # create root dir if not exists
+        if not os.path.exists(root):
+            os.makedirs(root)
+
         data = self.load_tcl_data(root, nps, ns, dl, dd, num_layers, s, p, a, uncentered, noisy, centers,
-                                  one_hot_labels, use_sem=use_sem)
+                                  one_hot_labels, use_sem=use_sem, chain=chain)
         self.data = data
         self.s = torch.from_numpy(data['s'])
         self.x = torch.from_numpy(data['x'])
@@ -370,7 +384,7 @@ class SyntheticDataset(Dataset):
 
     @staticmethod
     def load_tcl_data(root, nps, ns, dl, dd, num_layers, s, p, a, uncentered, noisy, centers, one_hot_labels,
-                      use_sem=False):
+                      use_sem=False, chain=False):
         path_to_dataset = root + 'tcl_' + '_'.join(
             [str(nps), str(ns), str(dl), str(dd), str(num_layers), str(s), p, a])
         if uncentered:
@@ -379,6 +393,8 @@ class SyntheticDataset(Dataset):
             path_to_dataset += '_noisy'
         if use_sem:
             path_to_dataset += '_sem'
+        if chain:
+            path_to_dataset += '_chain'
         if one_hot_labels:
             path_to_dataset += '_onehot'
         path_to_dataset += '.npz'
@@ -386,7 +402,7 @@ class SyntheticDataset(Dataset):
         if not os.path.exists(path_to_dataset) or s is None:
             kwargs = {"n_per_seg": nps, "n_seg": ns, "d_sources": dl, "d_data": dd, "n_layers": num_layers, "prior": p,
                       "activation": a, "seed": s, "batch_size": 0, "uncentered": uncentered, "noisy": noisy,
-                      "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels, "use_sem": use_sem, "one_hot_labels":one_hot_labels}
+                      "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels, "use_sem": use_sem, "chain": chain}
             save_data(path_to_dataset, **kwargs)
         print('loading data from {}'.format(path_to_dataset))
         return np.load(path_to_dataset)

@@ -1,0 +1,91 @@
+command:
+  - ${env}
+  - python3
+  - ivae/main.py
+method: grid
+metric:
+  goal: minimize
+  name: val_loss
+parameters:
+  tcl:
+    value: false
+  seed:
+    values: [42, 64, 982, 5748, 23567]
+  # dataset
+  nps:
+    value: 1000
+  ns:
+    value: 10  # -> for a small amount of segments, StrNN seem to work better
+  dl:
+    value: 5
+  dd:
+    value: 5
+  nl:
+    value: 1
+  s:
+    value: 1
+  p:
+    value: 'gauss'
+  act:
+    value: 'xtanh'
+  uncentered:
+    value: false
+  noisy:
+    value: false
+  staircase:
+    value: false
+  one_hot_labels:
+    value: false
+  use_sem:
+    value: true
+  chain:
+    value: false
+  data_path:
+    value: 'run/datasets'
+  # model args
+  n_layers:
+    value: 3
+  hidden_dim:
+    value: 100
+  activation:
+    value: 'xtanh'
+  ica:
+    value: true
+  initialize:
+    value: true
+  batch_norm:
+    value: false
+  tcl:
+    value: false
+  use_strnn:
+    value: true
+  separate_aux:
+    value: true
+  residual_aux:
+    value: false
+
+  # learning
+  a:
+    value: 100
+  b:
+    value: 1
+  c:
+    value: 0
+  d:
+    value: 10
+  gamma:
+    value: 0
+  lr:
+    value: 0.01
+  batch_size:
+    value: 64
+  epochs:
+    value: 20
+  no_scheduler:
+    value: false
+  scheduler_tol:
+    value: 3
+  anneal:
+    value: false
+  anneal_epoch:
+    value: 20
