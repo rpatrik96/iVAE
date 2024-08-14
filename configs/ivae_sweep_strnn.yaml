@@ -35,7 +35,7 @@ parameters:
   staircase:
     value: false
   one_hot_labels:
-    value: false
+    values: [true, false]
   use_sem:
     value: true
   chain:
@@ -44,15 +44,13 @@ parameters:
     value: 'run/datasets'
   # model args
   n_layers:
-    value: 3
-  aux_net_layers:
-    value: 1
+    values: [1, 2, 3]
   strnn_layers:
-    value: 4
+    values: [2,3,4]
   hidden_dim:
-    value: 100
+    values: [50, 100]
   strnn_width:
-    value: 80
+    values: [20, 40, 80]
   activation:
     value: 'xtanh'
   ica:
@@ -64,7 +62,7 @@ parameters:
   tcl:
     value: false
   use_strnn:
-    values: [true, false]
+    value: true
   separate_aux:
     value: true
   residual_aux:

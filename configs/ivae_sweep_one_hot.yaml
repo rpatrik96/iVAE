@@ -35,7 +35,7 @@ parameters:
   staircase:
     value: false
   one_hot_labels:
-    value: false
+    value: true
   use_sem:
     value: true
   chain:
@@ -46,9 +46,9 @@ parameters:
   n_layers:
     value: 3
   aux_net_layers:
-    value: 1
+    value: 3
   strnn_layers:
-    value: 4
+    value: 3
   hidden_dim:
     value: 100
   strnn_width:
