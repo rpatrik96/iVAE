@@ -37,7 +37,7 @@ def runner(args, config):
 
     if config.ica:
         model = cleanIVAE(data_dim=d_data, latent_dim=d_latent, aux_dim=d_aux, hidden_dim=config.hidden_dim,
-                          n_layers=config.n_layers, activation=config.activation, slope=.1, use_strnn=config.use_strnn, separate_aux=config.separate_aux, residual_aux=config.residual_aux, use_chain=config.chain, strnn_width=config.strnn_width, strnn_layers=config.strnn_layers).to(config.device)
+                          n_layers=config.n_layers, activation=config.activation, slope=.1, use_strnn=config.use_strnn, separate_aux=config.separate_aux, residual_aux=config.residual_aux, use_chain=config.chain, strnn_width=config.strnn_width, strnn_layers=config.strnn_layers, aux_net_layers=config.aux_net_layers).to(config.device)
     else:
         model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
                          n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)

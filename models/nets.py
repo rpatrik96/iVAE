@@ -333,7 +333,7 @@ class ResidualStrNN(nn.Module):
 
 class cleanIVAE(nn.Module):
     def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1,
-                 use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False, strnn_layers=1, strnn_width=40):
+                 use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False, strnn_layers=1, strnn_width=40, aux_net_layers=1):
         super().__init__()
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -412,10 +412,10 @@ class cleanIVAE(nn.Module):
                         strnn_width for _ in range(strnn_layers)
                     ]
                 else:
-                    aux_net = MLP(aux_dim+latent_dim, latent_dim, hidden_dim, 1, activation=activation, slope=slope)
+                    aux_net = MLP(aux_dim+latent_dim, latent_dim, hidden_dim, aux_net_layers, activation=activation, slope=slope)
 
                     hidden_sizes = [
-                        strnn_width for _ in range(strnn_layers-1)
+                        strnn_width for _ in range(strnn_layers)
                     ]
 
                 strnn = StrNN(
