@@ -13,12 +13,12 @@ parameters:
     values: [42, 64, 982, 5748, 23567, 8734, 564, 74452, 96, 26]
   # dataset
   nps:
-    values: [100, 1000, 10000]
+    value: 1000
   ns:
-    values: [5, 10, 20]  # -> for a small amount of segments, StrNN seem to work better
-  dl: # d_sources
+    value: 10  # -> for a small amount of segments, StrNN seem to work better
+  dl:
     value: 5
-  dd: #d_data
+  dd:
     value: 5
   nl:
     value: 1
@@ -35,11 +35,11 @@ parameters:
   staircase:
     value: false
   one_hot_labels:
-    value: true
+    value: false
   use_sem:
     value: true
   chain:
-    value: false
+    value: true
   data_path:
     value: 'run/datasets'
   # model args
@@ -48,7 +48,7 @@ parameters:
   aux_net_layers:
     value: 3
   strnn_layers:
-    value: 3
+    value: 2
   hidden_dim:
     value: 100
   strnn_width:

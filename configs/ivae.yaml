@@ -10,8 +10,9 @@ act: 'xtanh'
 uncentered: false
 noisy: false
 staircase: false
-one_hot_labels: false
-chain: false
+one_hot_labels: true
+chain: true
+use_sem: true
 
 # IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
 # residual StrNNs help when labels are not one-hot
@@ -21,6 +22,9 @@ chain: false
 # for a chain, StrNN works faster, and is better with one-hot (non-one-hot is only faster, but same perf)
 # model args
 n_layers: 3
+aux_net_layers: 3
+strnn_layers: 3
+strnn_width: 80
 hidden_dim: 100
 activation: 'xtanh'
 ica: true

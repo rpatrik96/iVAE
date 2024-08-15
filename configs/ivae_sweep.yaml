@@ -10,7 +10,7 @@ parameters:
   tcl:
     value: false
   seed:
-    values: [42, 64, 982, 5748, 23567]
+    values: [42, 64, 982, 5748, 23567, 8734, 564, 74452, 96, 26]
   # dataset
   nps:
     value: 1000
@@ -39,20 +39,22 @@ parameters:
   use_sem:
     value: true
   chain:
-    values: [true, false]
+    value: false
   data_path:
     value: 'run/datasets'
   # model args
   n_layers:
-    value: 3
-  aux_net_layers:
-    value: 1
-  strnn_layers:
     value: 4
+  aux_net_layers:
+    value: 3
+  strnn_layers:
+    value: 2
   hidden_dim:
     value: 100
   strnn_width:
     value: 80
+  ignore_u:
+    value: true
   activation:
     value: 'xtanh'
   ica:
@@ -64,7 +66,7 @@ parameters:
   tcl:
     value: false
   use_strnn:
-    values: [true, false]
+    values: [true,false]
   separate_aux:
     value: true
   residual_aux:

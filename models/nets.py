@@ -333,7 +333,8 @@ class ResidualStrNN(nn.Module):
 
 class cleanIVAE(nn.Module):
     def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1,
-                 use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False, strnn_layers=1, strnn_width=40, aux_net_layers=1):
+                 use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False,
+                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False):
         super().__init__()
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -357,6 +358,7 @@ class cleanIVAE(nn.Module):
         self.use_chain = use_chain
         self.strnn_layers = strnn_layers
         self.strnn_width = strnn_width
+        self.ignore_u = ignore_u
 
 
         if use_strnn is False:
@@ -405,49 +407,61 @@ class cleanIVAE(nn.Module):
                 if self.use_chain:
                     adjacency = np.tril(adjacency.T, k=1).T
 
+                hidden_sizes = [
+                    strnn_width for _ in range(strnn_layers)
+                ]
 
-                if self.residual_aux:
-                    aux_net = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
-                    hidden_sizes = [
-                        strnn_width for _ in range(strnn_layers)
-                    ]
+
+                if self.ignore_u is False:
+
+                    if self.residual_aux:
+                        aux_net = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+
+                    else:
+                        aux_net = MLP(aux_dim+latent_dim, latent_dim, hidden_dim, aux_net_layers, activation=activation, slope=slope)
+
+
+                    strnn = StrNN(
+                        nin=latent_dim,
+                        hidden_sizes=(tuple(hidden_sizes)),
+                        nout=latent_dim ,
+                        opt_type="greedy",
+                        adjacency=adjacency,
+                        activation="leaky_relu",
+                        init_type="ian_uniform",
+                        norm_type="batch",
+                    )
+                    #
+                    # strnn = ConditionalStrNN(
+                    #     nin=latent_dim,
+                    #     hidden_sizes=(tuple(hidden_sizes)),
+                    #     cond_features=aux_dim,
+                    #     nout=latent_dim,
+                    #     opt_type="greedy",
+                    #     adjacency=adjacency,
+                    #     activation="leaky_relu",
+                    #     init_type="ian_uniform",
+                    #     # norm_type="batch",
+                    # )
+
+
+                    if self.residual_aux:
+                        self.g = ResidualStrNN(strnn, aux_net)
+                    else:
+                        # self.g = strnn
+                        self.g =  nn.Sequential(*[aux_net, strnn])
+                    # self.g = ResidualStrNN(strnn, aux_net)
                 else:
-                    aux_net = MLP(aux_dim+latent_dim, latent_dim, hidden_dim, aux_net_layers, activation=activation, slope=slope)
-
-                    hidden_sizes = [
-                        strnn_width for _ in range(strnn_layers)
-                    ]
-
-                strnn = StrNN(
-                    nin=latent_dim,
-                    hidden_sizes=(tuple(hidden_sizes)),
-                    nout=latent_dim ,
-                    opt_type="greedy",
-                    adjacency=adjacency,
-                    activation="leaky_relu",
-                    init_type="ian_uniform",
-                    # norm_type="batch",
-                )
-                #
-                # strnn = ConditionalStrNN(
-                #     nin=latent_dim,
-                #     hidden_sizes=(tuple(hidden_sizes)),
-                #     cond_features=aux_dim,
-                #     nout=latent_dim,
-                #     opt_type="greedy",
-                #     adjacency=adjacency,
-                #     activation="leaky_relu",
-                #     init_type="ian_uniform",
-                #     # norm_type="batch",
-                # )
-
-
-                if self.residual_aux:
-                    self.g = ResidualStrNN(strnn, aux_net)
-                else:
-                    # self.g = strnn
-                    self.g =  nn.Sequential(*[aux_net, strnn])
-                # self.g = ResidualStrNN(strnn, aux_net)
+                    self.g = StrNN(
+                        nin=latent_dim,
+                        hidden_sizes=(tuple(hidden_sizes)),
+                        nout=latent_dim,
+                        opt_type="greedy",
+                        adjacency=adjacency,
+                        activation="leaky_relu",
+                        init_type="ian_uniform",
+                        norm_type="batch",
+                    )
 
 
         self.logv = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
@@ -463,13 +477,18 @@ class cleanIVAE(nn.Module):
         if self.use_strnn is False:
             g = self.g(xu)
         else:
-            if self.sep_aux is False:
-                g = self.g(xu)[:, :self.latent_dim]
-            else:
-                if self.residual_aux:
-                    g = self.g(x, u)
+            if self.ignore_u is False:
+                if self.sep_aux is False:
+                    g = self.g(xu)[:, :self.latent_dim]
                 else:
-                    g = self.g(xu)
+                    if self.residual_aux:
+                        g = self.g(x, u)
+                    else:
+                        g = self.g(xu)
+
+
+            else:
+                g = self.g(x)
         logv = self.logv(xu)
         return g, logv.exp()
 
