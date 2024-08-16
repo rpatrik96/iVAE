@@ -33,7 +33,8 @@ batch_norm: false
 tcl: false
 use_strnn: true
 separate_aux: true
-residual_aux: false
+residual_aux: true
+ignore_u: false
 
 # learning
 a: 100
