@@ -15,11 +15,11 @@ parameters:
   nps:
     value: 1000
   ns:
-    value: 10  # -> for a small amount of segments, StrNN seem to work better
+    value: -1  # -> for a small amount of segments, StrNN seem to work better
   dl:
-    value: 5
+    values: [3, 5, 8, 10]
   dd:
-    value: 5
+    value: -1
   nl:
     value: 2
   s:
