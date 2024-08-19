@@ -271,8 +271,9 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     from strnn import StrNN
 
                     adjacency = torch.tril(
-                        torch.bernoulli(0.75 * torch.ones(X.shape[1],
-                                   X.shape[1]))
+                        (torch.diag(torch.ones(X.shape[1],
+                                   X.shape[1])).diag() +  torch.bernoulli(0.75 * torch.ones(X.shape[1],
+                                   X.shape[1]))).bool().float()
                     ).numpy()
 
                     # make it a chain
@@ -323,8 +324,9 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                 from strnn import StrNN
 
                 adjacency = torch.tril(
-                    torch.bernoulli(0.75* torch.ones(d_sources,
-                               d_sources))
+                    (torch.diag(torch.ones(d_sources,
+                                           d_sources)).diag() + torch.bernoulli(0.75 * torch.ones(d_sources,
+                                                                                                   d_sources))).bool().float()
                 ).numpy()
 
                 # make it a chain
