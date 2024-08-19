@@ -125,7 +125,8 @@ def runner(args, config):
         # if torch.isnan(train_loss):
         #     break
 
-        # wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
+        if wandb.run:
+            wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
 
         if not config.no_scheduler:
             scheduler.step(train_loss)
