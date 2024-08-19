@@ -27,8 +27,8 @@ def runner(args, config):
 
 
     if config.ns == -1:
-        print(f"Got {config.ns=}, overriding to 2*source_dim + 1, i.e., {config.dd * 2 + 1}")
-        ns = config.dd * 2 + 1
+        print(f"Got {config.ns=}, overriding to 2*source_dim + 1, i.e., {config.dl * 2 + 1}")
+        ns = config.dl * 2 + 1
     else:
         ns = config.ns
 
