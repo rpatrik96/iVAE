@@ -260,34 +260,93 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         for nl in range(n_layers):
             A = generate_mixing_matrix(X.shape[1], d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
                                        staircase=staircase)
-            if use_sem and n_layers==1:
-                # the transpose is needed due to the dot product used below
-                A = np.tril(A).T
-                if chain:
-                    A = np.tril(A, k=1)
+            if use_sem:
+                if n_layers==1:
+                    # the transpose is needed due to the dot product used below
+                    A = np.tril(A).T
+                    if chain:
+                        A = np.tril(A, k=1)
 
-                print("using SEM")
-                print(f"{A=}")
+                else:
+                    from strnn import StrNN
 
-            if nl == n_layers - 1:
-                X = np.dot(X, A)
+                    adjacency = torch.tril(
+                        torch.ones(X.shape[1],
+                                   X.shape[1])
+                    ).numpy()
+
+                    # make it a chain
+                    if chain:
+                        adjacency = np.tril(adjacency.T, k=1).T
+
+                    sem = StrNN(
+                        nin=X.shape[1],
+                        hidden_sizes=(tuple([
+                            10 * X.shape[1] for _ in range(n_layers)
+                        ])),
+                        nout=X.shape[1],
+                        opt_type="greedy",
+                        adjacency=adjacency,
+                        activation="leaky_relu",
+                        init_type="ian_uniform",
+                        norm_type="batch",
+                    )
+
+                    X = sem(torch.from_numpy(X).float()).detach().numpy()
+
+                break
+
+
             else:
-                X = act_f(np.dot(X, A))
+                if nl == n_layers - 1:
+                    X = np.dot(X, A)
+                else:
+                    X = act_f(np.dot(X, A))
 
     else:
         # assert n_layers > 1  # suppose we always have at least 2 layers. The last layer doesn't have a non-linearity
         A = generate_mixing_matrix(d_sources, d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
         if use_sem:
-            # the transpose is needed due to the dot product used below
-            A = np.tril(A).T
-            if chain:
-                A = np.tril(A, k=1)
 
-            print("using SEM")
-            print(f"{A=}")
+            if n_layers ==1:
+                # the transpose is needed due to the dot product used below
+                A = np.tril(A).T
+                if chain:
+                    A = np.tril(A, k=1)
+
+                X = act_f(np.dot(S, A))
+
+            else:
+
+                from strnn import StrNN
+
+                adjacency = torch.tril(
+                    torch.ones(d_sources,
+                               d_sources)
+                ).numpy()
+
+                # make it a chain
+                if chain:
+                    adjacency = np.tril(adjacency.T, k=1).T
+
+                sem = StrNN(
+                    nin=d_sources,
+                    hidden_sizes=(tuple([
+                        10 * d_sources for _ in range(n_layers)
+                    ])),
+                    nout=d_sources,
+                    opt_type="greedy",
+                    adjacency=adjacency,
+                    activation="leaky_relu",
+                    init_type="ian_uniform",
+                    norm_type="batch",
+                )
+
+                X = sem(torch.from_numpy(S).float()).detach().numpy()
 
 
-        X = act_f(np.dot(S, A))
+
+
         if d_sources != d_data:
             B = generate_mixing_matrix(d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
         else:

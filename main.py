@@ -14,12 +14,14 @@ from runners import ivae_runner, tcl_runner
 def parse():
     parser = argparse.ArgumentParser(description='')
 
-    parser.add_argument('--config', type=str, default='ivae_sweep.yaml', help='Path to the config file')
+    parser.add_argument('--config', type=str, default='ivae.yaml', help='Path to the config file')
     parser.add_argument('--run', type=str, default='run', help='Path for saving running related data.')
     parser.add_argument('--doc', type=str, default='', help='A string for documentation purpose')
 
     parser.add_argument('--n-sims', type=int, default=1, help='Number of simulations to run')
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
+
+    parser.add_argument('--sweep', action='store_true')
 
     return parser.parse_args()
 
@@ -91,13 +93,18 @@ def main_sweep():
         r = ivae_runner(args, wandb.config)
 
 if __name__ == '__main__':
+
     args = parse()
 
-    # Set up your default hyperparameters
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"configs/{args.config}")) as file:
-        config = yaml.load(file, Loader=yaml.FullLoader)
+    if args.sweep is False:
+
+        main()
+    else:
+        # Set up your default hyperparameters
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"configs/{args.config}")) as file:
+            config = yaml.load(file, Loader=yaml.FullLoader)
 
 
-    sweep_id = wandb.sweep(config, project="ivae")
+        sweep_id = wandb.sweep(config, project="ivae")
 
-    wandb.agent(sweep_id, function=main_sweep)
+        wandb.agent(sweep_id, function=main_sweep, project="ivae")

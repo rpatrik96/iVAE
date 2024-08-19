@@ -10,7 +10,7 @@ from data import SyntheticDataset
 from metrics import mean_corr_coef as mcc
 from models import cleanIVAE, cleanVAE, Discriminator, permute_dims
 
-
+import wandb
 
 def runner(args, config):
 
@@ -20,11 +20,13 @@ def runner(args, config):
 
     factor = config.gamma > 0
 
-    if config.use_sem and config.nl != 1:
-        raise ValueError('Cannot use SEM with more than one layer')
+    if wandb.run:
+        data_path = config.data_path
+    else:
+        data_path = args.data_path
 
 
-    dset = SyntheticDataset(config.data_path, config.nps, config.ns, config.dl, config.dd, config.nl, config.s, config.p,
+    dset = SyntheticDataset(data_path, config.nps, config.ns, config.dl, config.dd, config.nl, config.s, config.p,
                             config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                             use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain, )
     d_data, d_latent, d_aux = dset.get_dims()
@@ -123,7 +125,7 @@ def runner(args, config):
         # if torch.isnan(train_loss):
         #     break
 
-        wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
+        # wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
 
         if not config.no_scheduler:
             scheduler.step(train_loss)

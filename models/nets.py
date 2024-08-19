@@ -464,6 +464,9 @@ class cleanIVAE(nn.Module):
                     )
 
 
+
+
+
         self.logv = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
 
     @staticmethod
