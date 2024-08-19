@@ -15,7 +15,7 @@ parameters:
   nps:
     value: 1000
   ns:
-    values: 10
+    value: 10
   dl: # d_sources
     value: 5
   dd: #d_data
