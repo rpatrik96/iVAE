@@ -271,13 +271,15 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     from strnn import StrNN
 
                     adjacency = torch.tril(
-                        torch.ones(X.shape[1],
-                                   X.shape[1])
+                        torch.bernoulli(0.75 * torch.ones(X.shape[1],
+                                   X.shape[1]))
                     ).numpy()
 
                     # make it a chain
                     if chain:
                         adjacency = np.tril(adjacency.T, k=1).T
+
+                    print(f"{adjacency=}")
 
                     sem = StrNN(
                         nin=X.shape[1],
@@ -321,13 +323,15 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                 from strnn import StrNN
 
                 adjacency = torch.tril(
-                    torch.ones(d_sources,
-                               d_sources)
+                    torch.bernoulli(0.75* torch.ones(d_sources,
+                               d_sources))
                 ).numpy()
 
                 # make it a chain
                 if chain:
                     adjacency = np.tril(adjacency.T, k=1).T
+
+                print(f"{adjacency=}")
 
                 sem = StrNN(
                     nin=d_sources,
@@ -452,6 +456,8 @@ class SyntheticDataset(Dataset):
             path_to_dataset += '_noisy'
         if use_sem:
             path_to_dataset += '_sem'
+            if num_layers > 1:
+                path_to_dataset += '_strnn'
         if chain:
             path_to_dataset += '_chain'
         if one_hot_labels:
