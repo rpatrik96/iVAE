@@ -14,12 +14,12 @@ parameters:
   # dataset
   nps:
     value: 1000
-  ns:
-    value: 10
-  dl: # d_sources
-    value: 5
-  dd: #d_data
-    value: 5
+  ns: # num segment
+    value: -1
+  dl: # source dim
+    values: [ 3, 5, 8, 10 ]
+  dd: #data dim
+    value: -1
   nl:
     value: 2
   s:
