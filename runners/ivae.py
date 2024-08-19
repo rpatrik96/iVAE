@@ -26,7 +26,20 @@ def runner(args, config):
         data_path = args.data_path
 
 
-    dset = SyntheticDataset(data_path, config.nps, config.ns, config.dl, config.dd, config.nl, config.s, config.p,
+    if config.ns == -1:
+        print(f"Got {config.ns=}, overriding to 2*source_dim + 1, i.e., {config.dd * 2 + 1}")
+        ns = config.dd * 2 + 1
+    else:
+        ns = config.ns
+
+    if config.dd == -1:
+        print(f"Got {config.dd=}, overriding source_dim, i.e., {config.dl}")
+        data_dim = config.dl
+    else:
+        data_dim = config.dd
+
+
+    dset = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s, config.p,
                             config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                             use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain, )
     d_data, d_latent, d_aux = dset.get_dims()
