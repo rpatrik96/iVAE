@@ -3,15 +3,15 @@ nps: 1000
 ns: 10  # -> for a small amount of segments, StrNN seem to work better
 dl: 5
 dd: 5
-nl: 1
+nl: 2
 s: 1
 p: 'gauss'
 act: 'xtanh'
 uncentered: false
 noisy: false
 staircase: false
-one_hot_labels: true
-chain: true
+one_hot_labels: false
+chain: false
 use_sem: true
 
 # IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
@@ -24,7 +24,7 @@ use_sem: true
 n_layers: 3
 aux_net_layers: 3
 strnn_layers: 3
-strnn_width: 80
+strnn_width: 40
 hidden_dim: 100
 activation: 'xtanh'
 ica: true
@@ -32,8 +32,9 @@ initialize: true
 batch_norm: false
 tcl: false
 use_strnn: true
+cond_strnn: false
 separate_aux: true
-residual_aux: true
+residual_aux: false
 ignore_u: false
 
 # learning

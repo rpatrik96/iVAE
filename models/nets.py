@@ -1,3 +1,4 @@
+import warnings
 from numbers import Number
 
 import numpy as np
@@ -6,28 +7,31 @@ from torch import distributions as dist
 from torch import nn
 from torch.nn import functional as F
 
-import warnings
+
 def weights_init(m):
     if isinstance(m, nn.Linear):
         nn.init.xavier_uniform_(m.weight.data)
 
 
-from strnn import MaskedLinear, StrNN
+from strnn import MaskedLinear
 from strnn.models.strNN import OPT_MAP, check_masks
 
+
 class ConditionedMaskedLinear(MaskedLinear):
-    def __init__(self, in_features, out_features, cond_features, init, activation, bias=False):
+    def __init__(self, in_features, out_features, cond_features, init, activation, bias=False, factor_complexity=1):
         super().__init__(in_features, out_features, init, activation)
 
-
         self.cond_features = cond_features
-        self.cond_net = nn.Linear(cond_features, in_features, bias=True)
+        self.factor_complexity = factor_complexity
+        self.cond_net1 = nn.Linear(cond_features, self.factor_complexity * self.in_features, bias=True)
+        self.cond_net2 = nn.Linear(cond_features, self.factor_complexity * self.out_features, bias=True)
 
-        self.cond_bias = nn.Linear(cond_features, in_features, bias=True)
-
-    def forward(self, x,u):
+    def forward(self, x, u):
         # x, u = xu[:, :self.in_features], xu[:, self.in_features:]
-        cond_mask = self.cond_net(u) #.view(x.shape[0], self.out_features, self.in_features)
+        factor1 = self.cond_net1(u).view(-1, self.factor_complexity,
+                                         self.in_features)  # .view(x.shape[0], self.out_features, self.in_features)
+        factor2 = self.cond_net2(u).view(-1, self.out_features,
+                                         self.factor_complexity)  # .view(x.shape[0], self.out_features, self.in_features)
 
         # (bs, out, in)
         # batched_mask = F.sigmoid(cond_mask)*self.mask
@@ -35,10 +39,18 @@ class ConditionedMaskedLinear(MaskedLinear):
         # result = torch.einsum('boi,bi->bo', batched_mask, x)
         # return result +  self.bias + self.cond_bias(u)
 
-        return F.linear(x*cond_mask + self.cond_bias(u), self.mask *self.weight, self.bias )
+        cond_mask = torch.sigmoid(torch.einsum("bfi,bof->boi", factor1, factor2)) * self.mask * self.weight
+        # cond_mask= factor1*self.mask *self.weight
+        # einsum (bs, out, in) x (bs, in) -> (bs, out)
+        result = torch.einsum('boi,bi->bo', cond_mask, x)
+        return result + self.bias
+
+        # return F.linear(x, self.mask *self.weight*m, self.bias )
+
 
 from strnn.models.model_utils import NONLINEARITIES
 from strnn.models.adaptive_layer_norm import AdaptiveLayerNorm
+
 
 class ConditionalStrNN(nn.Module):
     """Main neural network class that implements a Structured Neural Network.
@@ -172,10 +184,9 @@ class ConditionalStrNN(nn.Module):
         # TODO: Add gamma
         for layer in self.net_list:
             if isinstance(layer, ConditionedMaskedLinear):
-                x = layer(x,u)
+                x = layer(x, u)
 
         return x
-
 
     def update_masks(self):
         """Update masked linear layer masks to respect adjacency matrix."""
@@ -326,15 +337,15 @@ class ResidualStrNN(nn.Module):
         self.strnn = strnn
         self.mlp = mlp
 
-    def forward(self, x,u):
-       mlp_u = self.mlp(u)
-       return self.strnn(x*mlp_u+ mlp_u)
+    def forward(self, x, u):
+        mlp_u = self.mlp(u)
+        return self.strnn(x * mlp_u + mlp_u)
 
 
 class cleanIVAE(nn.Module):
     def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1,
                  use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False,
-                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False):
+                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False, cond_strnn=False):
         super().__init__()
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -359,45 +370,24 @@ class cleanIVAE(nn.Module):
         self.strnn_layers = strnn_layers
         self.strnn_width = strnn_width
         self.ignore_u = ignore_u
-
+        self.cond_strnn = cond_strnn
 
         if use_strnn is False:
             self.g = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
         else:
             print("----------------------")
-            print("Using StrNN")
+            print(f"Using {'conditional' if cond_strnn is True else ''} StrNN")
             print("----------------------")
             print(f"{aux_dim=}")
 
-            # mlp = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers-1, activation=activation, slope=slope)
+            hidden_sizes = [
+                strnn_width for _ in range(strnn_layers)
+            ]
 
             from strnn.models.strNN import StrNN
 
-            if separate_aux is False:
-                adjacency = torch.tril(
-                    torch.ones(latent_dim+ aux_dim,
-                               latent_dim+ aux_dim)
-                ).numpy()
+            if cond_strnn is True:
 
-                adjacency[:, latent_dim:] = 1.
-                adjacency[latent_dim:, :] = 1.
-
-                hidden_sizes = [
-                    (1 * hidden_dim) for _ in range(3)
-                ]
-
-                strnn = StrNN(
-                    nin=latent_dim + aux_dim,
-                    hidden_sizes=(tuple(hidden_sizes)),
-                    nout=latent_dim + aux_dim,
-                    opt_type="greedy",
-                    adjacency=adjacency,
-                    activation="leaky_relu",
-                    init_type="ian_uniform",
-                    # norm_type="batch",
-                )
-                self.g = strnn
-            else:
                 adjacency = torch.tril(
                     torch.ones(latent_dim,
                                latent_dim)
@@ -407,65 +397,90 @@ class cleanIVAE(nn.Module):
                 if self.use_chain:
                     adjacency = np.tril(adjacency.T, k=1).T
 
-                hidden_sizes = [
-                    strnn_width for _ in range(strnn_layers)
-                ]
+                strnn = ConditionalStrNN(
+                    nin=latent_dim,
+                    hidden_sizes=(tuple(hidden_sizes)),
+                    cond_features=aux_dim,
+                    nout=latent_dim,
+                    opt_type="greedy",
+                    adjacency=adjacency,
+                    activation="leaky_relu",
+                    init_type="ian_uniform",
+                    norm_type="batch",
+                )
 
+                self.g = strnn
 
-                if self.ignore_u is False:
+            else:
+                if separate_aux is False:
+                    adjacency = torch.tril(
+                        torch.ones(latent_dim + aux_dim,
+                                   latent_dim + aux_dim)
+                    ).numpy()
 
-                    if self.residual_aux:
-                        aux_net = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+                    adjacency[:, latent_dim:] = 1.
+                    adjacency[latent_dim:, :] = 1.
 
-                    else:
-                        aux_net = MLP(aux_dim+latent_dim, latent_dim, hidden_dim, aux_net_layers, activation=activation, slope=slope)
-
+                    hidden_sizes = [
+                        (1 * hidden_dim) for _ in range(3)
+                    ]
 
                     strnn = StrNN(
-                        nin=latent_dim,
+                        nin=latent_dim + aux_dim,
                         hidden_sizes=(tuple(hidden_sizes)),
-                        nout=latent_dim ,
+                        nout=latent_dim + aux_dim,
                         opt_type="greedy",
                         adjacency=adjacency,
                         activation="leaky_relu",
                         init_type="ian_uniform",
-                        norm_type="batch",
+                        # norm_type="batch",
                     )
-                    #
-                    # strnn = ConditionalStrNN(
-                    #     nin=latent_dim,
-                    #     hidden_sizes=(tuple(hidden_sizes)),
-                    #     cond_features=aux_dim,
-                    #     nout=latent_dim,
-                    #     opt_type="greedy",
-                    #     adjacency=adjacency,
-                    #     activation="leaky_relu",
-                    #     init_type="ian_uniform",
-                    #     # norm_type="batch",
-                    # )
-
-
-                    if self.residual_aux:
-                        self.g = ResidualStrNN(strnn, aux_net)
-                    else:
-                        # self.g = strnn
-                        self.g =  nn.Sequential(*[aux_net, strnn])
-                    # self.g = ResidualStrNN(strnn, aux_net)
+                    self.g = strnn
                 else:
-                    self.g = StrNN(
-                        nin=latent_dim,
-                        hidden_sizes=(tuple(hidden_sizes)),
-                        nout=latent_dim,
-                        opt_type="greedy",
-                        adjacency=adjacency,
-                        activation="leaky_relu",
-                        init_type="ian_uniform",
-                        norm_type="batch",
-                    )
+                    adjacency = torch.tril(
+                        torch.ones(latent_dim,
+                                   latent_dim)
+                    ).numpy()
 
+                    # make it a chain
+                    if self.use_chain:
+                        adjacency = np.tril(adjacency.T, k=1).T
 
+                    if self.ignore_u is False:
 
+                        if self.residual_aux:
+                            aux_net = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
 
+                        else:
+                            aux_net = MLP(aux_dim + latent_dim, latent_dim, hidden_dim, aux_net_layers,
+                                          activation=activation, slope=slope)
+
+                        strnn = StrNN(
+                            nin=latent_dim,
+                            hidden_sizes=(tuple(hidden_sizes)),
+                            nout=latent_dim,
+                            opt_type="greedy",
+                            adjacency=adjacency,
+                            activation="leaky_relu",
+                            init_type="ian_uniform",
+                            norm_type="batch",
+                        )
+
+                        if self.residual_aux:
+                            self.g = ResidualStrNN(strnn, aux_net)
+                        else:
+                            self.g = nn.Sequential(*[aux_net, strnn])
+                    else:
+                        self.g = StrNN(
+                            nin=latent_dim,
+                            hidden_sizes=(tuple(hidden_sizes)),
+                            nout=latent_dim,
+                            opt_type="greedy",
+                            adjacency=adjacency,
+                            activation="leaky_relu",
+                            init_type="ian_uniform",
+                            norm_type="batch",
+                        )
 
         self.logv = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
 
@@ -480,18 +495,19 @@ class cleanIVAE(nn.Module):
         if self.use_strnn is False:
             g = self.g(xu)
         else:
-            if self.ignore_u is False:
-                if self.sep_aux is False:
-                    g = self.g(xu)[:, :self.latent_dim]
-                else:
-                    if self.residual_aux:
-                        g = self.g(x, u)
-                    else:
-                        g = self.g(xu)
-
-
+            if self.cond_strnn is True:
+                g = self.g(x, u)
             else:
-                g = self.g(x)
+                if self.ignore_u is False:
+                    if self.sep_aux is False:
+                        g = self.g(xu)[:, :self.latent_dim]
+                    else:
+                        if self.residual_aux:
+                            g = self.g(x, u)
+                        else:
+                            g = self.g(xu)
+                else:
+                    g = self.g(x)
         logv = self.logv(xu)
         return g, logv.exp()
 

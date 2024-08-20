@@ -56,7 +56,7 @@ def runner(args, config):
                           n_layers=config.n_layers, activation=config.activation, slope=.1, use_strnn=config.use_strnn,
                           separate_aux=config.separate_aux, residual_aux=config.residual_aux, use_chain=config.chain,
                           strnn_width=config.strnn_width, strnn_layers=config.strnn_layers,
-                          aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u).to(config.device)
+                          aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u, cond_strnn=config.cond_strnn).to(config.device)
     else:
         model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
                          n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)
