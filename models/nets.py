@@ -25,6 +25,9 @@ class ConditionedMaskedLinear(MaskedLinear):
         self.factor_complexity = factor_complexity
         self.cond_net1 = nn.Linear(cond_features, self.factor_complexity * self.in_features, bias=True)
         self.cond_net2 = nn.Linear(cond_features, self.factor_complexity * self.out_features, bias=True)
+        self.cond_bias = nn.Linear(cond_features, out_features, bias=True)
+
+
 
     def forward(self, x, u):
         # x, u = xu[:, :self.in_features], xu[:, self.in_features:]
@@ -43,7 +46,8 @@ class ConditionedMaskedLinear(MaskedLinear):
         # cond_mask= factor1*self.mask *self.weight
         # einsum (bs, out, in) x (bs, in) -> (bs, out)
         result = torch.einsum('boi,bi->bo', cond_mask, x)
-        return result + self.bias
+        # result = F.linear(x, self.mask * self.weight, self.bias)
+        return result
 
         # return F.linear(x, self.mask *self.weight*m, self.bias )
 
@@ -339,7 +343,7 @@ class ResidualStrNN(nn.Module):
 
     def forward(self, x, u):
         mlp_u = self.mlp(u)
-        return self.strnn(x * mlp_u + mlp_u)
+        return self.strnn(x) + mlp_u
 
 
 class cleanIVAE(nn.Module):
@@ -491,7 +495,7 @@ class cleanIVAE(nn.Module):
         return scaled.add(mu)
 
     def encoder(self, x, u):
-        xu = torch.cat((x, u), 1)
+        xu = torch.cat((x, u), 1).float()
         if self.use_strnn is False:
             g = self.g(xu)
         else:
@@ -507,7 +511,7 @@ class cleanIVAE(nn.Module):
                         else:
                             g = self.g(xu)
                 else:
-                    g = self.g(x)
+                    g = self.g(x.float())
         logv = self.logv(xu)
         return g, logv.exp()
 
