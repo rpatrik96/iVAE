@@ -41,7 +41,8 @@ def runner(args, config):
 
     dset = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s, config.p,
                             config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
-                            use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain, )
+                            use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
+                            staircase=config.staircase)
     d_data, d_latent, d_aux = dset.get_dims()
 
     loader_params = {'num_workers': 6, 'pin_memory': True} if torch.cuda.is_available() else {}
