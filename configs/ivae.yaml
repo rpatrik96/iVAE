@@ -1,13 +1,13 @@
 # dataset
 nps: 1000
-ns: 10  # -> for a small amount of segments, StrNN seem to work better
-dl: 5
-dd: 5
-nl: 2
-s: 1
+ns: 5  # -> for a small amount of segments, StrNN seem to work better
+dl: 2
+dd: 2
+nl: 3
+s: 1 #seed
 p: 'gauss'
 act: 'xtanh'
-uncentered: false
+uncentered: true
 noisy: false
 staircase: false
 one_hot_labels: false
@@ -21,9 +21,9 @@ use_sem: true
 # non-residual aux works better than iVAE on non one-hot labels and SLIGHTLY better on one-hot labels
 # for a chain, StrNN works faster, and is better with one-hot (non-one-hot is only faster, but same perf)
 # model args
-n_layers: 3
+n_layers: 2
 aux_net_layers: 3
-strnn_layers: 3
+strnn_layers: 2
 strnn_width: 40
 hidden_dim: 100
 activation: 'xtanh'
@@ -32,16 +32,16 @@ initialize: true
 batch_norm: false
 tcl: false
 use_strnn: true
-cond_strnn: false
+cond_strnn: true
 separate_aux: true
 residual_aux: false
 ignore_u: false
 
 # learning
-a: 100
-b: 1
-c: 0
-d: 10
+a: 100 # a * logpx -> reconstruction loss
+b: 1 # b * (logqs_cux - logqs), i.e., log q (z|x,u) - log p(s)
+c: 0 # c * (logqs - logqs_i) -> factoriziation of the latent
+d: 10 # d * (logqs_i - logps_cu) -> factorized sources and prior
 gamma: 0
 lr: 0.01
 batch_size: 64
