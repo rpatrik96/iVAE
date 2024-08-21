@@ -265,20 +265,23 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     # the transpose is needed due to the dot product used below
                     A = np.tril(A).T
                     if chain:
-                        A = np.tril(A, k=1)
+                        A = np.linalg.inv(np.tril(A, k=1))
 
                 else:
                     from strnn import StrNN
 
                     adjacency = torch.tril(
                         (torch.diag(torch.ones(X.shape[1],
-                                   X.shape[1])).diag() +  torch.bernoulli(0.75 * torch.ones(X.shape[1],
+                                   X.shape[1])).diag() +  torch.bernoulli(0.65 * torch.ones(X.shape[1],
                                    X.shape[1]))).bool().float()
                     ).numpy()
 
                     # make it a chain
                     if chain:
                         adjacency = np.tril(adjacency.T, k=1).T
+
+
+                    adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
 
                     print(f"{adjacency=}")
 
@@ -291,8 +294,8 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                         opt_type="greedy",
                         adjacency=adjacency,
                         activation="leaky_relu",
-                        init_type="ian_uniform",
-                        norm_type="batch",
+                        init_type="kaiming_uniform",
+                        # norm_type="batch",
                     )
 
                     X = sem(torch.from_numpy(X).float()).detach().numpy()
@@ -313,11 +316,14 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
             if n_layers ==1:
                 # the transpose is needed due to the dot product used below
-                A = np.tril(A).T
-                if chain:
-                    A = np.tril(A, k=1)
+                # Note: adding a diagonal term is to increase the abs-determinant (otherwise teh problem is ill-conditioned_
+                A = np.tril(A).T + np.random.randn(*A.shape).diagonal() * np.eye(A.shape[0])
 
-                X = act_f(np.dot(S, A))
+                if chain:
+                    A = np.linalg.inv(np.tril(A, k=1))
+
+                print(f"{np.linalg.det(A)=}")
+                X = act_f(np.dot(S, A)).astype(float)
 
             else:
 
@@ -325,7 +331,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
                 adjacency = torch.tril(
                     (torch.diag(torch.ones(d_sources,
-                                           d_sources)).diag() + torch.bernoulli(0.75 * torch.ones(d_sources,
+                                           d_sources)).diag() + torch.bernoulli(0.65 * torch.ones(d_sources,
                                                                                                    d_sources))).bool().float()
                 ).numpy()
 
@@ -334,6 +340,8 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     adjacency = np.tril(adjacency.T, k=1).T
 
                 print(f"{adjacency=}")
+
+                adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
 
                 sem = StrNN(
                     nin=d_sources,
@@ -344,13 +352,14 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     opt_type="greedy",
                     adjacency=adjacency,
                     activation="leaky_relu",
-                    init_type="ian_uniform",
-                    norm_type="batch",
+                    init_type="kaiming_uniform",
+                    # norm_type="batch",
                 )
 
-                X = sem(torch.from_numpy(S).float()).detach().numpy()
+                X = sem(torch.from_numpy(S).float()).detach().numpy() + S
 
-
+        else:
+            X = act_f(np.dot(S, A))
 
 
         if d_sources != d_data:
@@ -402,7 +411,7 @@ def save_data(path, *args, **kwargs):
 
 class SyntheticDataset(Dataset):
     def __init__(self, root, nps, ns, dl, dd, num_layers, s, p, a, uncentered=False, noisy=False, centers=None,
-                 double=False, one_hot_labels=True, use_sem=False, chain=False):
+                 double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False):
         self.root = root
 
         # create root dir if not exists
@@ -410,7 +419,7 @@ class SyntheticDataset(Dataset):
             os.makedirs(root)
 
         data = self.load_tcl_data(root, nps, ns, dl, dd, num_layers, s, p, a, uncentered, noisy, centers,
-                                  one_hot_labels, use_sem=use_sem, chain=chain)
+                                  one_hot_labels, use_sem=use_sem, chain=chain, staircase=staircase)
         self.data = data
         self.s = torch.from_numpy(data['s'])
         self.x = torch.from_numpy(data['x'])
@@ -449,11 +458,13 @@ class SyntheticDataset(Dataset):
 
     @staticmethod
     def load_tcl_data(root, nps, ns, dl, dd, num_layers, s, p, a, uncentered, noisy, centers, one_hot_labels,
-                      use_sem=False, chain=False):
+                      use_sem=False, chain=False, staircase=False):
         path_to_dataset = root + 'tcl_' + '_'.join(
             [str(nps), str(ns), str(dl), str(dd), str(num_layers), str(s), p, a])
         if uncentered:
-            path_to_dataset += '_u'
+            path_to_dataset += '_uncentered'
+        if staircase:
+            path_to_dataset += '_staircase'
         if noisy:
             path_to_dataset += '_noisy'
         if use_sem:
@@ -469,7 +480,8 @@ class SyntheticDataset(Dataset):
         if not os.path.exists(path_to_dataset) or s is None:
             kwargs = {"n_per_seg": nps, "n_seg": ns, "d_sources": dl, "d_data": dd, "n_layers": num_layers, "prior": p,
                       "activation": a, "seed": s, "batch_size": 0, "uncentered": uncentered, "noisy": noisy,
-                      "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels, "use_sem": use_sem, "chain": chain}
+                      "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels, "use_sem": use_sem,
+                      "chain": chain, "staircase": staircase}
             save_data(path_to_dataset, **kwargs)
         print('loading data from {}'.format(path_to_dataset))
         return np.load(path_to_dataset)
