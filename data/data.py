@@ -373,7 +373,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                 X = act_f(np.dot(X, B))
 
     # add noise:
-    if noisy:
+    if float(noisy) != 0:
         X += noisy * np.random.randn(*X.shape)
 
     if discrete:
@@ -466,7 +466,7 @@ class SyntheticDataset(Dataset):
         if staircase:
             path_to_dataset += '_staircase'
         if noisy:
-            path_to_dataset += '_noisy'
+            path_to_dataset += f'_noisy_{int(noisy)}'
         if use_sem:
             path_to_dataset += '_sem'
             if num_layers > 1:
