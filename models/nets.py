@@ -380,7 +380,7 @@ class cleanIVAE(nn.Module):
             if ignore_u is False:
                 self.z_mean = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
             else:
-                self.z_mean = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+                self.z_mean = MLP(data_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
         else:
             print("----------------------")
             print(f"Using {'conditional' if cond_strnn is True else ''} StrNN")
