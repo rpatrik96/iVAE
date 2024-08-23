@@ -35,14 +35,14 @@ def runner(args, config):
         data_dim = config.data_dim
 
     dset_train = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim,
-                                  config.nl, config.seed, config.prior,
+                                  config.nl, config.data_seed, config.prior,
                                   config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                   use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
                                   staircase=config.staircase)
 
     # use different seed for validation set
     dset_val = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim, config.nl,
-                                config.seed + 1752, config.prior,
+                                config.data_seed + 1752, config.prior,
                                 config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                 use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
                                 staircase=config.staircase)
