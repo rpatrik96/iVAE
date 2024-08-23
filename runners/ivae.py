@@ -10,7 +10,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 
 
-def runner(args, config):
+def runner(args, config, verbose=False):
     st = time.time()
 
     print('Executing script on: {}\n'.format(config.device))
@@ -140,7 +140,8 @@ def runner(args, config):
         perf_hist.append(train_perf)
         train_loss /= len(source_dim_train)
         loss_hist.append(train_loss)
-        print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
+        if verbose:
+            print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
                                                                                 train_perf))
 
         # if torch.isnan(train_loss):
@@ -177,7 +178,8 @@ def runner(args, config):
 
             val_perf /= len(source_dim_val)
             val_loss /= len(source_dim_val)
-            print('==> Epoch {}/{}:\tval loss: {:.6f}\tval perf: {:.6f}'.format(epoch, config.epochs, val_loss,
+            if verbose:
+                print('==> Epoch {}/{}:\tval loss: {:.6f}\tval perf: {:.6f}'.format(epoch, config.epochs, val_loss,
                                                                                 val_perf))
             if wandb.run:
                 wandb.log({'val_loss': val_loss, 'val_mcc': val_perf})
