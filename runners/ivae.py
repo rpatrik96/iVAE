@@ -3,17 +3,14 @@ import time
 import torch
 import torch.nn.functional as F
 import wandb
-from torch import optim
-from torch.utils.data import DataLoader
-
 from data import SyntheticDataset
 from metrics import mean_corr_coef as mcc
 from models import cleanIVAE, cleanVAE, Discriminator, permute_dims
+from torch import optim
+from torch.utils.data import DataLoader
 
-import wandb
 
 def runner(args, config):
-
     st = time.time()
 
     print('Executing script on: {}\n'.format(config.device))
@@ -25,37 +22,37 @@ def runner(args, config):
     else:
         data_path = args.data_path
 
-
-    if config.ns == -1:
-        print(f"Got {config.ns=}, overriding to 2*source_dim + 1, i.e., {config.dl * 2 + 1}")
-        ns = config.dl * 2 + 1
+    if config.num_segments == -1:
+        print(f"Got {config.num_segments=}, overriding to 2*source_dim + 1, i.e., {config.source_dim * 2 + 1}")
+        num_segments = config.source_dim * 2 + 1
     else:
-        ns = config.ns
+        num_segments = config.num_segments
 
-    if config.dd == -1:
-        print(f"Got {config.dd=}, overriding source_dim, i.e., {config.dl}")
-        data_dim = config.dl
+    if config.data_dim == -1:
+        print(f"Got {config.data_dim=}, overriding source_dim, i.e., {config.source_dim}")
+        data_dim = config.source_dim
     else:
-        data_dim = config.dd
+        data_dim = config.data_dim
 
-
-    dset_train = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s, config.p,
-                            config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
-                            use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                            staircase=config.staircase)
-
-    # use different seed for validation set
-    dset_val = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s+1752, config.p,
+    dset_train = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim,
+                                  config.nl, config.seed, config.prior,
                                   config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                   use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
                                   staircase=config.staircase)
 
+    # use different seed for validation set
+    dset_val = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim, config.nl,
+                                config.seed + 1752, config.prior,
+                                config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
+                                use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
+                                staircase=config.staircase)
 
     d_data, d_latent, d_aux = dset_train.get_dims()
 
     loader_params = {'num_workers': 6, 'pin_memory': True} if torch.cuda.is_available() else {}
-    dl_train = DataLoader(dset_train, batch_size=config.batch_size, shuffle=True, drop_last=True, **loader_params)
-    dl_val = DataLoader(dset_val, batch_size=config.batch_size, shuffle=False, drop_last=True, **loader_params)
+    source_dim_train = DataLoader(dset_train, batch_size=config.batch_size, shuffle=True, drop_last=True,
+                                  **loader_params)
+    source_dim_val = DataLoader(dset_val, batch_size=config.batch_size, shuffle=False, drop_last=True, **loader_params)
 
     perfs = []
     loss_hists = []
@@ -66,7 +63,8 @@ def runner(args, config):
                           n_layers=config.n_layers, activation=config.activation, slope=.1, use_strnn=config.use_strnn,
                           separate_aux=config.separate_aux, residual_aux=config.residual_aux, use_chain=config.chain,
                           strnn_width=config.strnn_width, strnn_layers=config.strnn_layers,
-                          aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u, cond_strnn=config.cond_strnn).to(config.device)
+                          aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u,
+                          cond_strnn=config.cond_strnn).to(config.device)
     else:
         model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
                          n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)
@@ -101,7 +99,7 @@ def runner(args, config):
 
         train_loss = 0
         train_perf = 0
-        for i, data in enumerate(dl_train):
+        for i, data in enumerate(source_dim_train):
             if not factor:
                 x, u, s_true = data
             else:
@@ -138,9 +136,9 @@ def runner(args, config):
                 D_tc_loss.backward()
                 optim_D.step()
 
-        train_perf /= len(dl_train)
+        train_perf /= len(source_dim_train)
         perf_hist.append(train_perf)
-        train_loss /= len(dl_train)
+        train_loss /= len(source_dim_train)
         loss_hist.append(train_loss)
         print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
                                                                                 train_perf))
@@ -154,12 +152,11 @@ def runner(args, config):
         if not config.no_scheduler:
             scheduler.step(train_loss)
 
-
         if epoch % config.val_freq == 0:
             model.eval()
             val_loss = 0
             val_perf = 0
-            for i, data in enumerate(dl_val):
+            for i, data in enumerate(source_dim_val):
                 if not factor:
                     x, u, s_true = data
                 else:
@@ -178,10 +175,10 @@ def runner(args, config):
                     perf = 0
                 val_perf += perf
 
-            val_perf /= len(dl_val)
-            val_loss /= len(dl_val)
+            val_perf /= len(source_dim_val)
+            val_loss /= len(source_dim_val)
             print('==> Epoch {}/{}:\tval loss: {:.6f}\tval perf: {:.6f}'.format(epoch, config.epochs, val_loss,
-                                                                              val_perf))
+                                                                                val_perf))
             if wandb.run:
                 wandb.log({'val_loss': val_loss, 'val_mcc': val_perf})
     print('\ntotal runtime: {}'.format(time.time() - st))

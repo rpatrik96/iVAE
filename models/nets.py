@@ -377,7 +377,10 @@ class cleanIVAE(nn.Module):
         self.cond_strnn = cond_strnn
 
         if use_strnn is False:
-            self.g = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+            if ignore_u is False:
+                self.z_mean = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+            else:
+                self.z_mean = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
         else:
             print("----------------------")
             print(f"Using {'conditional' if cond_strnn is True else ''} StrNN")
@@ -413,7 +416,7 @@ class cleanIVAE(nn.Module):
                     norm_type="batch",
                 )
 
-                self.g = strnn
+                self.z_mean = strnn
 
             else:
                 if separate_aux is False:
@@ -439,7 +442,7 @@ class cleanIVAE(nn.Module):
                         init_type="ian_uniform",
                         # norm_type="batch",
                     )
-                    self.g = strnn
+                    self.z_mean = strnn
                 else:
                     adjacency = torch.tril(
                         torch.ones(latent_dim,
@@ -471,11 +474,11 @@ class cleanIVAE(nn.Module):
                         )
 
                         if self.residual_aux:
-                            self.g = ResidualStrNN(strnn, aux_net)
+                            self.z_mean = ResidualStrNN(strnn, aux_net)
                         else:
-                            self.g = nn.Sequential(*[aux_net, strnn])
+                            self.z_mean = nn.Sequential(*[aux_net, strnn])
                     else:
-                        self.g = StrNN(
+                        self.z_mean = StrNN(
                             nin=latent_dim,
                             hidden_sizes=(tuple(hidden_sizes)),
                             nout=latent_dim,
@@ -486,7 +489,12 @@ class cleanIVAE(nn.Module):
                             norm_type="batch",
                         )
 
-        self.logv = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+
+        if ignore_u is False:
+            self.z_log_var = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+        else:
+            self.z_log_var = MLP(data_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+
 
     @staticmethod
     def reparameterize(mu, v):
@@ -497,27 +505,34 @@ class cleanIVAE(nn.Module):
     def encoder(self, x, u):
         xu = torch.cat((x, u), 1).float()
         if self.use_strnn is False:
-            g = self.g(xu)
+            if self.ignore_u is False:
+                z_mean = self.z_mean(xu)
+            else:
+                z_mean = self.z_mean(x)
         else:
             if self.cond_strnn is True:
-                g = self.g(x, u)
+                z_mean = self.z_mean(x, u)
             else:
                 if self.ignore_u is False:
                     if self.sep_aux is False:
-                        g = self.g(xu)[:, :self.latent_dim]
+                        z_mean = self.z_mean(xu)[:, :self.latent_dim]
                     else:
                         if self.residual_aux:
-                            g = self.g(x, u)
+                            z_mean = self.z_mean(x, u)
                         else:
-                            g = self.g(xu)
+                            z_mean = self.z_mean(xu)
                 else:
-                    g = self.g(x.float())
-        logv = self.logv(xu)
-        return g, logv.exp()
+                    z_mean = self.z_mean(x.float())
 
-    def decoder(self, s):
-        f = self.f(s)
-        return f
+        if self.ignore_u is False:
+            logv = self.z_log_var(xu)
+        else:
+            logv = self.z_log_var(x)
+        return z_mean, logv.exp()
+
+    def decoder(self, z_hat):
+        x_hat = self.f(z_hat)
+        return x_hat
 
     def prior(self, u):
         logl = self.logl(u)
@@ -525,25 +540,25 @@ class cleanIVAE(nn.Module):
 
     def forward(self, x, u):
         l = self.prior(u)
-        g, v = self.encoder(x, u)
-        s = self.reparameterize(g, v)
-        f = self.decoder(s)
-        return f, g, v, s, l
+        z_mean, z_var = self.encoder(x, u)
+        z_hat = self.reparameterize(z_mean, z_var)
+        x_hat = self.decoder(z_hat)
+        return x_hat, z_mean, z_var, z_hat, l
 
     def elbo(self, x, u, N, a=1., b=1., c=1., d=1.):
-        f, g, v, z, l = self.forward(x, u)
-        M, d_latent = z.size()
-        logpx = log_normal(x, f, self.decoder_var.to(x.device)).sum(dim=-1)
-        logqs_cux = log_normal(z, g, v).sum(dim=-1)
-        logps_cu = log_normal(z, None, l).sum(dim=-1)
+        x_hat, z_mean, z_var, z_hat, l = self.forward(x, u)
+        M, d_latent = z_hat.size()
+        logpx = log_normal(x, x_hat, self.decoder_var.to(x.device)).sum(dim=-1)
+        logqs_cux = log_normal(z_hat, z_mean, z_var).sum(dim=-1)
+        logps_cu = log_normal(z_hat, None, l).sum(dim=-1)
 
         # no view for v to account for case where it is a float. It works for general case because mu shape is (1, M, d)
-        logqs_tmp = log_normal(z.view(M, 1, d_latent), g.view(1, M, d_latent), v.view(1, M, d_latent))
+        logqs_tmp = log_normal(z_hat.view(M, 1, d_latent), z_mean.view(1, M, d_latent), z_var.view(1, M, d_latent))
         logqs = torch.logsumexp(logqs_tmp.sum(dim=-1), dim=1, keepdim=False) - np.log(M * N)
         logqs_i = (torch.logsumexp(logqs_tmp, dim=1, keepdim=False) - np.log(M * N)).sum(dim=-1)
 
         elbo = -(a * logpx - b * (logqs_cux - logqs) - c * (logqs - logqs_i) - d * (logqs_i - logps_cu)).mean()
-        return elbo, z
+        return elbo, z_hat
 
 
 class cleanVAE(nn.Module):

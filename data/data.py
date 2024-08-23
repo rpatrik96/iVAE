@@ -410,7 +410,7 @@ def save_data(path, *args, **kwargs):
 
 
 class SyntheticDataset(Dataset):
-    def __init__(self, root, nps, ns, dl, dd, num_layers, s, p, a, uncentered=False, noisy=False, centers=None,
+    def __init__(self, root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn, uncentered=False, noisy=False, centers=None,
                  double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False):
         self.root = root
 
@@ -418,7 +418,7 @@ class SyntheticDataset(Dataset):
         if not os.path.exists(root):
             os.makedirs(root)
 
-        data = self.load_tcl_data(root, nps, ns, dl, dd, num_layers, s, p, a, uncentered, noisy, centers,
+        data = self.load_tcl_data(root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn, uncentered, noisy, centers,
                                   one_hot_labels, use_sem=use_sem, chain=chain, staircase=staircase)
         self.data = data
         self.s = torch.from_numpy(data['s'])
@@ -432,9 +432,9 @@ class SyntheticDataset(Dataset):
         self.latent_dim = self.s.shape[1]
         self.aux_dim = self.u.shape[1]
         self.data_dim = self.x.shape[1]
-        self.prior = p
-        self.activation = a
-        self.seed = s
+        self.prior = prior
+        self.activation = act_fn
+        self.seed = seed
         self.n_layers = num_layers
         self.uncentered = uncentered
         self.noisy = noisy
@@ -457,10 +457,10 @@ class SyntheticDataset(Dataset):
             return self.x[index], self.x[index2], self.u[index], self.s[index]
 
     @staticmethod
-    def load_tcl_data(root, nps, ns, dl, dd, num_layers, s, p, a, uncentered, noisy, centers, one_hot_labels,
+    def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered, noisy, centers, one_hot_labels,
                       use_sem=False, chain=False, staircase=False):
         path_to_dataset = root + 'tcl_' + '_'.join(
-            [str(nps), str(ns), str(dl), str(dd), str(num_layers), str(s), p, a])
+            [str(n_per_seg), str(n_seg), str(d_sources), str(d_data), str(num_layers), str(seed), prior, activation_fn])
         if uncentered:
             path_to_dataset += '_uncentered'
         if staircase:
@@ -477,9 +477,9 @@ class SyntheticDataset(Dataset):
             path_to_dataset += '_onehot'
         path_to_dataset += '.npz'
 
-        if not os.path.exists(path_to_dataset) or s is None:
-            kwargs = {"n_per_seg": nps, "n_seg": ns, "d_sources": dl, "d_data": dd, "n_layers": num_layers, "prior": p,
-                      "activation": a, "seed": s, "batch_size": 0, "uncentered": uncentered, "noisy": noisy,
+        if not os.path.exists(path_to_dataset) or seed is None:
+            kwargs = {"n_per_seg": n_per_seg, "n_seg": n_seg, "d_sources": d_sources, "d_data": d_data, "n_layers": num_layers, "prior": prior,
+                      "activation": activation_fn, "seed": seed, "batch_size": 0, "uncentered": uncentered, "noisy": noisy,
                       "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels, "use_sem": use_sem,
                       "chain": chain, "staircase": staircase}
             save_data(path_to_dataset, **kwargs)
