@@ -38,7 +38,7 @@ def runner(args, config, verbose=False):
                                   config.nl, config.data_seed, config.prior,
                                   config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                   use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                  staircase=config.staircase, dag_mask_prob = config.dag_mask_prob)
+                                  staircase=config.staircase, dag_mask_prob=config.dag_mask_prob)
 
     # use different seed for validation set
     # ensure that both have the same adjacency matrix
@@ -46,7 +46,8 @@ def runner(args, config, verbose=False):
                                 config.data_seed + 1752, config.prior,
                                 config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                 use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                staircase=config.staircase, adjacency=dset_train.adjacency, dag_mask_prob = config.dag_mask_prob)
+                                staircase=config.staircase, adjacency=dset_train.adjacency,
+                                dag_mask_prob=config.dag_mask_prob)
 
     d_data, d_latent, d_aux = dset_train.get_dims()
 
@@ -65,7 +66,9 @@ def runner(args, config, verbose=False):
                           separate_aux=config.separate_aux, residual_aux=config.residual_aux, use_chain=config.chain,
                           strnn_width=config.strnn_width, strnn_layers=config.strnn_layers,
                           aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u,
-                          cond_strnn=config.cond_strnn, adjacency=dset_train.adjacency if config.strnn_adjacency_override is True else None).to(config.device)
+                          cond_strnn=config.cond_strnn,
+                          adjacency=dset_train.adjacency if config.strnn_adjacency_override is True else None).to(
+            config.device)
     else:
         model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
                          n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)
@@ -143,7 +146,7 @@ def runner(args, config, verbose=False):
         loss_hist.append(train_loss)
         if verbose:
             print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
-                                                                                train_perf))
+                                                                                    train_perf))
 
         # if torch.isnan(train_loss):
         #     break
@@ -181,7 +184,7 @@ def runner(args, config, verbose=False):
             val_loss /= len(source_dim_val)
             if verbose:
                 print('==> Epoch {}/{}:\tval loss: {:.6f}\tval perf: {:.6f}'.format(epoch, config.epochs, val_loss,
-                                                                                val_perf))
+                                                                                    val_perf))
             if wandb.run:
                 wandb.log({'val_loss': val_loss, 'val_mcc': val_perf})
     print('\ntotal runtime: {}'.format(time.time() - st))
