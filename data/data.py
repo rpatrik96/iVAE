@@ -14,6 +14,7 @@ import numpy as np
 import scipy
 import torch
 from scipy.stats import hypsecant
+from strnn import StrNN
 from torch.utils.data import Dataset
 
 
@@ -200,7 +201,7 @@ def generate_nonstationary_sources(n_per_seg: int, n_seg: int, d: int, prior='ga
 def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='gauss', activation='lrelu', batch_size=0,
                   seed=10, slope=.1, var_bounds=np.array([0.5, 3]), lin_type='uniform', n_iter_4_cond=1e4,
                   dtype=np.float32, noisy=0, uncentered=False, centers=None, staircase=False, discrete=False,
-                  one_hot_labels=True, repeat_linearity=False, use_sem=False, chain=False):
+                  one_hot_labels=True, repeat_linearity=False, use_sem=False, chain=False, adjacency=None):
     """
     Generate artificial data with arbitrary mixing
     @param int n_per_seg: number of observations per segment
@@ -254,34 +255,39 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         raise ValueError('incorrect non linearity: {}'.format(activation))
 
     # Mixing time!
-
     if not repeat_linearity:
         X = S.copy()
         for nl in range(n_layers):
             A = generate_mixing_matrix(X.shape[1], d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
                                        staircase=staircase)
             if use_sem:
-                if n_layers==1:
+                if n_layers == 1:
                     # the transpose is needed due to the dot product used below
                     A = np.tril(A).T
                     if chain:
                         A = np.linalg.inv(np.tril(A, k=1))
 
+                    print(f"{np.linalg.det(A)=}")
+                    X = act_f(np.dot(S, A)).astype(float)
+
+                    # T needed to get lower triangular
+                    # inv needed as the StrNN is the inference model
+                    adjacency = np.linalg.inv(A).T.astype(bool).astype(float)
                 else:
-                    from strnn import StrNN
 
-                    adjacency = torch.tril(
-                        (torch.diag(torch.ones(X.shape[1],
-                                   X.shape[1])).diag() +  torch.bernoulli(0.65 * torch.ones(X.shape[1],
-                                   X.shape[1]))).bool().float()
-                    ).numpy()
+                    if adjacency is None:
+                        adjacency = torch.tril(
+                            (torch.diag(torch.ones(X.shape[1],
+                                                   X.shape[1])).diag() + torch.bernoulli(0.65 * torch.ones(X.shape[1],
+                                                                                                           X.shape[
+                                                                                                               1]))).bool().float()
+                        ).numpy()
 
-                    # make it a chain
-                    if chain:
-                        adjacency = np.tril(adjacency.T, k=1).T
+                        # make it a chain
+                        if chain:
+                            adjacency = np.tril(adjacency.T, k=1).T
 
-
-                    adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
+                        adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
 
                     print(f"{adjacency=}")
 
@@ -313,11 +319,12 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         # assert n_layers > 1  # suppose we always have at least 2 layers. The last layer doesn't have a non-linearity
         A = generate_mixing_matrix(d_sources, d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
         if use_sem:
+            A = np.abs(A)
 
-            if n_layers ==1:
+            if n_layers == 1:
                 # the transpose is needed due to the dot product used below
                 # Note: adding a diagonal term is to increase the abs-determinant (otherwise teh problem is ill-conditioned_
-                A = np.tril(A).T + np.random.randn(*A.shape).diagonal() * np.eye(A.shape[0])
+                A = np.tril(A).T + np.abs(np.random.randn(*A.shape).diagonal()) * np.eye(A.shape[0])
 
                 if chain:
                     A = np.linalg.inv(np.tril(A, k=1))
@@ -325,23 +332,25 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                 print(f"{np.linalg.det(A)=}")
                 X = act_f(np.dot(S, A)).astype(float)
 
+                # T needed to get lower triangular
+                # inv needed as the StrNN is the inference model
+                adjacency = np.linalg.inv(A).T.astype(bool).astype(float)
             else:
 
-                from strnn import StrNN
+                if adjacency is None:
 
-                adjacency = torch.tril(
-                    (torch.diag(torch.ones(d_sources,
-                                           d_sources)).diag() + torch.bernoulli(0.65 * torch.ones(d_sources,
-                                                                                                   d_sources))).bool().float()
-                ).numpy()
+                    adjacency = torch.tril(
+                        (torch.diag(torch.ones(d_sources,
+                                               d_sources)).diag() + torch.bernoulli(0.65 * torch.ones(d_sources,
+                                                                                                      d_sources))).bool().float()
+                    ).numpy()
 
-                # make it a chain
-                if chain:
-                    adjacency = np.tril(adjacency.T, k=1).T
+                    # make it a chain
+                    if chain:
+                        adjacency = np.tril(adjacency.T, k=1).T
 
+                    adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
                 print(f"{adjacency=}")
-
-                adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
 
                 sem = StrNN(
                     nin=d_sources,
@@ -360,7 +369,6 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
         else:
             X = act_f(np.dot(S, A))
-
 
         if d_sources != d_data:
             B = generate_mixing_matrix(d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
@@ -382,7 +390,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
     if not batch_size:
         if one_hot_labels:
             U = to_one_hot([U], m=n_seg)[0]
-        return S, X, U, M, L
+        return S, X, U, M, L, adjacency
     else:
         idx = np.random.permutation(n)
         Xb, Sb, Ub, Mb, Lb = [], [], [], [], []
@@ -395,31 +403,34 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
             Lb += [L[idx][c * batch_size:(c + 1) * batch_size]]
         if one_hot_labels:
             Ub = to_one_hot(Ub, m=n_seg)
-        return Sb, Xb, Ub, Mb, Lb
+        return Sb, Xb, Ub, Mb, Lb, adjacency
 
 
 def save_data(path, *args, **kwargs):
     kwargs['batch_size'] = 0  # leave batch creation to torch DataLoader
-    S, X, U, M, L = generate_data(**kwargs)
+    S, X, U, M, L, adjacency = generate_data(**kwargs)
     print('Creating dataset {} ...'.format(path))
     dir_path = '/'.join(path.split('/')[:-1])
     if not os.path.exists(dir_path):
         os.makedirs('/'.join(path.split('/')[:-1]))
-    np.savez_compressed(path, s=S, x=X, u=U, m=M, L=L)
+    np.savez_compressed(path, s=S, x=X, u=U, m=M, L=L, adjacency=adjacency)
     print(' ... done')
 
 
 class SyntheticDataset(Dataset):
-    def __init__(self, root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn, uncentered=False, noisy=False, centers=None,
-                 double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False):
+    def __init__(self, root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn,
+                 uncentered=False, noisy=False, centers=None,
+                 double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False, adjacency=None):
         self.root = root
 
         # create root dir if not exists
         if not os.path.exists(root):
             os.makedirs(root)
 
-        data = self.load_tcl_data(root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn, uncentered, noisy, centers,
-                                  one_hot_labels, use_sem=use_sem, chain=chain, staircase=staircase)
+        data = self.load_tcl_data(root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior,
+                                  act_fn, uncentered, noisy, centers,
+                                  one_hot_labels, use_sem=use_sem, chain=chain, staircase=staircase,
+                                  adjacency=adjacency)
         self.data = data
         self.s = torch.from_numpy(data['s'])
         self.x = torch.from_numpy(data['x'])
@@ -428,6 +439,7 @@ class SyntheticDataset(Dataset):
             self.u = self.u.unsqueeze(1)
         self.l = data['L']
         self.m = data['m']
+        self.adjacency = data['adjacency']
         self.len = self.x.shape[0]
         self.latent_dim = self.s.shape[1]
         self.aux_dim = self.u.shape[1]
@@ -457,8 +469,9 @@ class SyntheticDataset(Dataset):
             return self.x[index], self.x[index2], self.u[index], self.s[index]
 
     @staticmethod
-    def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered, noisy, centers, one_hot_labels,
-                      use_sem=False, chain=False, staircase=False):
+    def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered,
+                      noisy, centers, one_hot_labels,
+                      use_sem=False, chain=False, staircase=False, adjacency=None):
         path_to_dataset = root + 'tcl_' + '_'.join(
             [str(n_per_seg), str(n_seg), str(d_sources), str(d_data), str(num_layers), str(seed), prior, activation_fn])
         if uncentered:
@@ -478,10 +491,13 @@ class SyntheticDataset(Dataset):
         path_to_dataset += '.npz'
 
         if not os.path.exists(path_to_dataset) or seed is None:
-            kwargs = {"n_per_seg": n_per_seg, "n_seg": n_seg, "d_sources": d_sources, "d_data": d_data, "n_layers": num_layers, "prior": prior,
-                      "activation": activation_fn, "seed": seed, "batch_size": 0, "uncentered": uncentered, "noisy": noisy,
-                      "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels, "use_sem": use_sem,
-                      "chain": chain, "staircase": staircase}
+            kwargs = {"n_per_seg": n_per_seg, "n_seg": n_seg, "d_sources": d_sources, "d_data": d_data,
+                      "n_layers": num_layers, "prior": prior,
+                      "activation": activation_fn, "seed": seed, "batch_size": 0, "uncentered": uncentered,
+                      "noisy": noisy,
+                      "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels,
+                      "use_sem": use_sem,
+                      "chain": chain, "staircase": staircase, "adjacency": adjacency}
             save_data(path_to_dataset, **kwargs)
         print('loading data from {}'.format(path_to_dataset))
         return np.load(path_to_dataset)

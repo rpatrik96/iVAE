@@ -41,11 +41,12 @@ def runner(args, config, verbose=False):
                                   staircase=config.staircase)
 
     # use different seed for validation set
+    # ensure that both have the same adjacency matrix
     dset_val = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim, config.nl,
                                 config.data_seed + 1752, config.prior,
                                 config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                 use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                staircase=config.staircase)
+                                staircase=config.staircase, adjacency=dset_train.adjacency)
 
     d_data, d_latent, d_aux = dset_train.get_dims()
 
@@ -64,7 +65,7 @@ def runner(args, config, verbose=False):
                           separate_aux=config.separate_aux, residual_aux=config.residual_aux, use_chain=config.chain,
                           strnn_width=config.strnn_width, strnn_layers=config.strnn_layers,
                           aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u,
-                          cond_strnn=config.cond_strnn).to(config.device)
+                          cond_strnn=config.cond_strnn, adjacency=dset_train.adjacency if config.strnn_adjacency_override is True else None).to(config.device)
     else:
         model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
                          n_layers=config.n_layers, activation=config.activation, slope=.1).to(config.device)

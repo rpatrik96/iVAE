@@ -349,7 +349,7 @@ class ResidualStrNN(nn.Module):
 class cleanIVAE(nn.Module):
     def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1,
                  use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False,
-                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False, cond_strnn=False):
+                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False, cond_strnn=False, adjacency=None):
         super().__init__()
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -384,6 +384,8 @@ class cleanIVAE(nn.Module):
         else:
             print("----------------------")
             print(f"Using {'conditional' if cond_strnn is True else ''} StrNN")
+            if adjacency is not None:
+                print(f"Using {adjacency=}")
             print("----------------------")
             print(f"{aux_dim=}")
 
@@ -395,14 +397,15 @@ class cleanIVAE(nn.Module):
 
             if cond_strnn is True:
 
-                adjacency = torch.tril(
-                    torch.ones(latent_dim,
-                               latent_dim)
-                ).numpy()
+                if adjacency is None:
+                    adjacency = torch.tril(
+                        torch.ones(latent_dim,
+                                   latent_dim)
+                    ).numpy()
 
-                # make it a chain
-                if self.use_chain:
-                    adjacency = np.tril(adjacency.T, k=1).T
+                    # make it a chain
+                    if self.use_chain:
+                        adjacency = np.tril(adjacency.T, k=1).T
 
                 strnn = ConditionalStrNN(
                     nin=latent_dim,
@@ -420,13 +423,14 @@ class cleanIVAE(nn.Module):
 
             else:
                 if separate_aux is False:
-                    adjacency = torch.tril(
-                        torch.ones(latent_dim + aux_dim,
-                                   latent_dim + aux_dim)
-                    ).numpy()
+                    if adjacency is None:
+                        adjacency = torch.tril(
+                            torch.ones(latent_dim + aux_dim,
+                                       latent_dim + aux_dim)
+                        ).numpy()
 
-                    adjacency[:, latent_dim:] = 1.
-                    adjacency[latent_dim:, :] = 1.
+                        adjacency[:, latent_dim:] = 1.
+                        adjacency[latent_dim:, :] = 1.
 
                     hidden_sizes = [
                         (1 * hidden_dim) for _ in range(3)
@@ -444,14 +448,16 @@ class cleanIVAE(nn.Module):
                     )
                     self.z_mean = strnn
                 else:
-                    adjacency = torch.tril(
-                        torch.ones(latent_dim,
-                                   latent_dim)
-                    ).numpy()
 
-                    # make it a chain
-                    if self.use_chain:
-                        adjacency = np.tril(adjacency.T, k=1).T
+                    if adjacency is None:
+                        adjacency = torch.tril(
+                            torch.ones(latent_dim,
+                                       latent_dim)
+                        ).numpy()
+
+                        # make it a chain
+                        if self.use_chain:
+                            adjacency = np.tril(adjacency.T, k=1).T
 
                     if self.ignore_u is False:
 
@@ -511,7 +517,7 @@ class cleanIVAE(nn.Module):
                 z_mean = self.z_mean(x.float())
         else:
             if self.cond_strnn is True:
-                z_mean = self.z_mean(x, u)
+                z_mean = self.z_mean(x.float(), u)
             else:
                 if self.ignore_u is False:
                     if self.sep_aux is False:
