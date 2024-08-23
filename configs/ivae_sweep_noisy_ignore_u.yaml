@@ -67,6 +67,8 @@ parameters:
     value: false
   use_strnn:
     values: [true,false]
+  cond_strnn:
+    value: false
   separate_aux:
     value: true
   residual_aux:
