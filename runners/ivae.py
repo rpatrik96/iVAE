@@ -152,7 +152,7 @@ def runner(args, config):
         if not config.no_scheduler:
             scheduler.step(train_loss)
 
-        if epoch % config.val_freq == 0:
+        if epoch % config.val_freq == 0 or epoch == config.epochs:
             model.eval()
             val_loss = 0
             val_perf = 0
