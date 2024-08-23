@@ -508,7 +508,7 @@ class cleanIVAE(nn.Module):
             if self.ignore_u is False:
                 z_mean = self.z_mean(xu)
             else:
-                z_mean = self.z_mean(x)
+                z_mean = self.z_mean(x.float())
         else:
             if self.cond_strnn is True:
                 z_mean = self.z_mean(x, u)
@@ -527,7 +527,7 @@ class cleanIVAE(nn.Module):
         if self.ignore_u is False:
             logv = self.z_log_var(xu)
         else:
-            logv = self.z_log_var(x)
+            logv = self.z_log_var(x.float())
         return z_mean, logv.exp()
 
     def decoder(self, z_hat):
