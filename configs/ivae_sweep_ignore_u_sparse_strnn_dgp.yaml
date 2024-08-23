@@ -15,11 +15,11 @@ parameters:
   num_per_segment:
     value: 1000
   num_segments:
-    value: -1  # -> for a small amount of segments, StrNN seem to work better
+    value: 10  # -> for a small amount of segments, StrNN seem to work better
   source_dim:
-    values: [ 3, 5, 8, 10 ]
+    value: 5
   data_dim:
-    value: -1
+    value: 5
   nl:
     value: 2
   data_seed:
@@ -31,15 +31,17 @@ parameters:
   uncentered:
     value: false
   noisy:
-    value: false
+    value: 0
   staircase:
     value: false
   one_hot_labels:
-    value: true
+    values: [true, false]
   use_sem:
     value: true
   chain:
     value: false
+  dag_mask_prob:
+    values: [0.3, 0.45, .6]
   data_path:
     value: 'run/datasets/'
   # model args
@@ -52,7 +54,7 @@ parameters:
   hidden_dim:
     value: 100
   strnn_width:
-    value: 80
+    value: 100
   ignore_u:
     value: true
   activation:
@@ -67,6 +69,10 @@ parameters:
     value: false
   use_strnn:
     values: [true,false]
+  strnn_adjacency_override:
+    values: [false, true]
+  cond_strnn:
+    value: false
   separate_aux:
     value: true
   residual_aux:
@@ -88,7 +94,7 @@ parameters:
   batch_size:
     value: 64
   epochs:
-    value: 20
+    value: 50
   no_scheduler:
     value: false
   scheduler_tol:
@@ -98,4 +104,4 @@ parameters:
   anneal_epoch:
     value: 20
   val_freq:
-    value: 5
+    value: 1

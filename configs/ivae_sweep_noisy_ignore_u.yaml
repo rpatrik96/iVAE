@@ -69,6 +69,8 @@ parameters:
     value: false
   use_strnn:
     values: [true,false]
+  strnn_adjacency_override:
+    value: false
   cond_strnn:
     value: false
   separate_aux:

@@ -278,8 +278,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
                     if adjacency is None:
                         adjacency = torch.tril(
-                            (torch.diag(torch.ones(X.shape[1],
-                                                   X.shape[1])).diag() + torch.bernoulli(
+                            (torch.bitwise_not(torch.tril(torch.ones(X.shape[1],X.shape[1]), -2).bool()).float().tril() + torch.bernoulli(
                                 dag_mask_prob * torch.ones(X.shape[1],
                                                            X.shape[
                                                                1]))).bool().float()
@@ -289,9 +288,12 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                         if chain:
                             adjacency = np.tril(adjacency.T, k=1).T
 
+
+                        print(f"{adjacency=}")
+
                         adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
 
-                    print(f"{adjacency=}")
+
 
                     sem = StrNN(
                         nin=X.shape[1],
@@ -342,8 +344,8 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                 if adjacency is None:
 
                     adjacency = torch.tril(
-                        (torch.diag(torch.ones(d_sources,
-                                               d_sources)).diag() + torch.bernoulli(
+                        (torch.bitwise_not(
+                            torch.tril(torch.ones(d_sources, d_sources), -2).bool()).float().tril() + torch.bernoulli(
                             dag_mask_prob * torch.ones(d_sources,
                                                        d_sources))).bool().float()
                     ).numpy()
@@ -352,8 +354,9 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     if chain:
                         adjacency = np.tril(adjacency.T, k=1).T
 
+                    print(f"{adjacency=}")
                     adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
-                print(f"{adjacency=}")
+
 
                 sem = StrNN(
                     nin=d_sources,
@@ -488,6 +491,8 @@ class SyntheticDataset(Dataset):
             path_to_dataset += '_sem'
             if num_layers > 1:
                 path_to_dataset += '_strnn'
+                if dag_mask_prob < 1:
+                    path_to_dataset += f'_dag_{int(100*dag_mask_prob)}'
         if chain:
             path_to_dataset += '_chain'
         if one_hot_labels:
