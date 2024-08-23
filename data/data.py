@@ -201,7 +201,8 @@ def generate_nonstationary_sources(n_per_seg: int, n_seg: int, d: int, prior='ga
 def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='gauss', activation='lrelu', batch_size=0,
                   seed=10, slope=.1, var_bounds=np.array([0.5, 3]), lin_type='uniform', n_iter_4_cond=1e4,
                   dtype=np.float32, noisy=0, uncentered=False, centers=None, staircase=False, discrete=False,
-                  one_hot_labels=True, repeat_linearity=False, use_sem=False, chain=False, adjacency=None):
+                  one_hot_labels=True, repeat_linearity=False, use_sem=False, chain=False, adjacency=None,
+                  dag_mask_prob=0.65):
     """
     Generate artificial data with arbitrary mixing
     @param int n_per_seg: number of observations per segment
@@ -278,9 +279,10 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                     if adjacency is None:
                         adjacency = torch.tril(
                             (torch.diag(torch.ones(X.shape[1],
-                                                   X.shape[1])).diag() + torch.bernoulli(0.65 * torch.ones(X.shape[1],
-                                                                                                           X.shape[
-                                                                                                               1]))).bool().float()
+                                                   X.shape[1])).diag() + torch.bernoulli(
+                                dag_mask_prob * torch.ones(X.shape[1],
+                                                           X.shape[
+                                                               1]))).bool().float()
                         ).numpy()
 
                         # make it a chain
@@ -341,8 +343,9 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
                     adjacency = torch.tril(
                         (torch.diag(torch.ones(d_sources,
-                                               d_sources)).diag() + torch.bernoulli(0.65 * torch.ones(d_sources,
-                                                                                                      d_sources))).bool().float()
+                                               d_sources)).diag() + torch.bernoulli(
+                            dag_mask_prob * torch.ones(d_sources,
+                                                       d_sources))).bool().float()
                     ).numpy()
 
                     # make it a chain
@@ -420,7 +423,8 @@ def save_data(path, *args, **kwargs):
 class SyntheticDataset(Dataset):
     def __init__(self, root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn,
                  uncentered=False, noisy=False, centers=None,
-                 double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False, adjacency=None):
+                 double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False, adjacency=None,
+                 dag_mask_prob=0.65):
         self.root = root
 
         # create root dir if not exists
@@ -430,7 +434,7 @@ class SyntheticDataset(Dataset):
         data = self.load_tcl_data(root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior,
                                   act_fn, uncentered, noisy, centers,
                                   one_hot_labels, use_sem=use_sem, chain=chain, staircase=staircase,
-                                  adjacency=adjacency)
+                                  adjacency=adjacency, dag_mask_prob=dag_mask_prob)
         self.data = data
         self.s = torch.from_numpy(data['s'])
         self.x = torch.from_numpy(data['x'])
@@ -471,7 +475,7 @@ class SyntheticDataset(Dataset):
     @staticmethod
     def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered,
                       noisy, centers, one_hot_labels,
-                      use_sem=False, chain=False, staircase=False, adjacency=None):
+                      use_sem=False, chain=False, staircase=False, adjacency=None, dag_mask_prob=0.65):
         path_to_dataset = root + 'tcl_' + '_'.join(
             [str(n_per_seg), str(n_seg), str(d_sources), str(d_data), str(num_layers), str(seed), prior, activation_fn])
         if uncentered:
@@ -497,7 +501,7 @@ class SyntheticDataset(Dataset):
                       "noisy": noisy,
                       "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels,
                       "use_sem": use_sem,
-                      "chain": chain, "staircase": staircase, "adjacency": adjacency}
+                      "chain": chain, "staircase": staircase, "adjacency": adjacency, "dag_mask_prob": dag_mask_prob}
             save_data(path_to_dataset, **kwargs)
         print('loading data from {}'.format(path_to_dataset))
         return np.load(path_to_dataset)

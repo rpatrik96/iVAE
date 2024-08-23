@@ -38,7 +38,7 @@ def runner(args, config, verbose=False):
                                   config.nl, config.data_seed, config.prior,
                                   config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                   use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                  staircase=config.staircase)
+                                  staircase=config.staircase, dag_mask_prob = config.dag_mask_prob)
 
     # use different seed for validation set
     # ensure that both have the same adjacency matrix
@@ -46,7 +46,7 @@ def runner(args, config, verbose=False):
                                 config.data_seed + 1752, config.prior,
                                 config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                 use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                staircase=config.staircase, adjacency=dset_train.adjacency)
+                                staircase=config.staircase, adjacency=dset_train.adjacency, dag_mask_prob = config.dag_mask_prob)
 
     d_data, d_latent, d_aux = dset_train.get_dims()
 
