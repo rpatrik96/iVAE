@@ -39,14 +39,23 @@ def runner(args, config):
         data_dim = config.dd
 
 
-    dset = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s, config.p,
+    dset_train = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s, config.p,
                             config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                             use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
                             staircase=config.staircase)
-    d_data, d_latent, d_aux = dset.get_dims()
+
+    # use different seed for validation set
+    dset_val = SyntheticDataset(data_path, config.nps, ns, config.dl, data_dim, config.nl, config.s+1752, config.p,
+                                  config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
+                                  use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
+                                  staircase=config.staircase)
+
+
+    d_data, d_latent, d_aux = dset_train.get_dims()
 
     loader_params = {'num_workers': 6, 'pin_memory': True} if torch.cuda.is_available() else {}
-    data_loader = DataLoader(dset, batch_size=config.batch_size, shuffle=True, drop_last=True, **loader_params)
+    dl_train = DataLoader(dset_train, batch_size=config.batch_size, shuffle=True, drop_last=True, **loader_params)
+    dl_val = DataLoader(dset_val, batch_size=config.batch_size, shuffle=False, drop_last=True, **loader_params)
 
     perfs = []
     loss_hists = []
@@ -92,14 +101,14 @@ def runner(args, config):
 
         train_loss = 0
         train_perf = 0
-        for i, data in enumerate(data_loader):
+        for i, data in enumerate(dl_train):
             if not factor:
                 x, u, s_true = data
             else:
                 x, x2, u, s_true = data
             x, u = x.to(config.device), u.to(config.device)
             optimizer.zero_grad()
-            loss, z = model.elbo(x, u, len(dset), a=a, b=b, c=c, d=d)
+            loss, z = model.elbo(x, u, len(dset_train), a=a, b=b, c=c, d=d)
             if factor:
                 D_z = D(z)
                 vae_tc_loss = (D_z[:, :1] - D_z[:, 1:]).mean()
@@ -129,9 +138,9 @@ def runner(args, config):
                 D_tc_loss.backward()
                 optim_D.step()
 
-        train_perf /= len(data_loader)
+        train_perf /= len(dl_train)
         perf_hist.append(train_perf)
-        train_loss /= len(data_loader)
+        train_loss /= len(dl_train)
         loss_hist.append(train_loss)
         print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
                                                                                 train_perf))
@@ -144,15 +153,46 @@ def runner(args, config):
 
         if not config.no_scheduler:
             scheduler.step(train_loss)
+
+
+        if epoch % config.val_freq == 0:
+            model.eval()
+            val_loss = 0
+            val_perf = 0
+            for i, data in enumerate(dl_val):
+                if not factor:
+                    x, u, s_true = data
+                else:
+                    x, x2, u, s_true = data
+                x, u = x.to(config.device), u.to(config.device)
+                loss, z = model.elbo(x, u, len(dset_train), a=a, b=b, c=c, d=d)
+                if factor:
+                    D_z = D(z)
+                    vae_tc_loss = (D_z[:, :1] - D_z[:, 1:]).mean()
+                    loss += config.gamma * vae_tc_loss
+
+                val_loss += loss.item()
+                try:
+                    perf = mcc(s_true.numpy(), z.cpu().detach().numpy())
+                except:
+                    perf = 0
+                val_perf += perf
+
+            val_perf /= len(dl_val)
+            val_loss /= len(dl_val)
+            print('==> Epoch {}/{}:\tval loss: {:.6f}\tval perf: {:.6f}'.format(epoch, config.epochs, val_loss,
+                                                                              val_perf))
+            if wandb.run:
+                wandb.log({'val_loss': val_loss, 'val_mcc': val_perf})
     print('\ntotal runtime: {}'.format(time.time() - st))
 
     # evaluate perf on full dataset
-    Xt, Ut, St = dset.x.to(config.device), dset.u.to(config.device), dset.s
+    Xt, Ut, St = dset_train.x.to(config.device), dset_train.u.to(config.device), dset_train.s
     if config.ica:
         _, _, _, s, _ = model(Xt, Ut)
     else:
         _, _, _, s = model(Xt)
-    full_perf = mcc(dset.s.numpy(), s.cpu().detach().numpy())
+    full_perf = mcc(dset_train.s.numpy(), s.cpu().detach().numpy())
     perfs.append(full_perf)
     loss_hists.append(loss_hist)
     perf_hists.append(perf_hist)

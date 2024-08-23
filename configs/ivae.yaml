@@ -50,3 +50,4 @@ no_scheduler: false
 scheduler_tol: 3
 anneal: false
 anneal_epoch: 20
+val_freq: 5
