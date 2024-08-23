@@ -4,7 +4,7 @@ num_segments: 5  # -> for a small amount of segments, StrNN seem to work better
 source_dim: 2
 data_dim: 2
 nl: 3
-seed: 1 
+data_seed: 1
 prior: 'gauss'
 act: 'xtanh'
 uncentered: true
@@ -36,6 +36,7 @@ cond_strnn: true
 separate_aux: true
 residual_aux: false
 ignore_u: false
+seed: 42
 
 # learning
 a: 100 # a * logpx -> reconstruction loss

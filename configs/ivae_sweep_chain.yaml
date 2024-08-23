@@ -5,26 +5,26 @@ command:
 method: grid
 metric:
   goal: minimize
-  name: train_loss
+  name: val_loss
 parameters:
   tcl:
     value: false
   seed:
     values: [42, 64, 982, 5748, 23567, 8734, 564, 74452, 96, 26]
   # dataset
-  nps:
+  num_per_segment:
     value: 1000
-  ns:
+  num_segments:
     value: 10  # -> for a small amount of segments, StrNN seem to work better
-  dl:
+  source_dim:
     value: 5
-  dd:
+  data_dim:
     value: 5
   nl:
     value: 1
-  s:
+  data_seed:
     value: 1
-  p:
+  prior:
     value: 'gauss'
   act:
     value: 'xtanh'
@@ -97,3 +97,5 @@ parameters:
     value: false
   anneal_epoch:
     value: 20
+  val_freq:
+    value: 5

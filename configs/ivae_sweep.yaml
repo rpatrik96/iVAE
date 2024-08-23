@@ -22,7 +22,7 @@ parameters:
     value: 5
   nl:
     value: 1
-  seed:
+  data_seed:
     value: 1
   prior:
     value: 'gauss'
