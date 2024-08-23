@@ -10,7 +10,7 @@ parameters:
   tcl:
     value: false
   seed:
-    values: [42, 64, 982, 5748, 23567]
+    values: [42, 64, 982, 5748, 23567, 8734, 564, 74452, 96, 26]
   # dataset
   num_per_segment:
     value: 1000
@@ -31,30 +31,32 @@ parameters:
   uncentered:
     value: false
   noisy:
-    values: [0, 1, 2, 5]
+    values: [0, 1, 2]
   staircase:
     value: false
   one_hot_labels:
-    value: false
+    values: [true, false]
   use_sem:
     value: true
   chain:
-    value: false
+    value: true
+  dag_mask_prob:
+    value: 0.65
   data_path:
-    value: 'run/datasets'
+    value: 'run/datasets/'
   # model args
   n_layers:
-    value: 4
+    value: 3
   aux_net_layers:
     value: 3
   strnn_layers:
-    value: 2
+    value: 3
   hidden_dim:
     value: 100
   strnn_width:
-    value: 80
+    value: 100
   ignore_u:
-    values: [true, false]
+    values: [false, true]
   activation:
     value: 'xtanh'
   ica:
@@ -90,7 +92,7 @@ parameters:
   batch_size:
     value: 64
   epochs:
-    value: 20
+    value: 50
   no_scheduler:
     value: false
   scheduler_tol:
@@ -100,4 +102,4 @@ parameters:
   anneal_epoch:
     value: 20
   val_freq:
-    value: 5
+    value: 1
