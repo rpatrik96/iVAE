@@ -375,32 +375,37 @@ class cleanIVAE(nn.Module):
         self.strnn_width = strnn_width
         self.ignore_u = ignore_u
         self.cond_strnn = cond_strnn
+        self.aux_net_layers = aux_net_layers
 
-        if use_strnn is False:
-            if ignore_u is False:
-                self.z_mean = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+        self._setup_encoder(adjacency)
+
+    def _setup_encoder(self, adjacency):
+        if self.use_strnn is False:
+            if self.ignore_u is False:
+                self.z_mean = MLP(self.data_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
+                                  slope=self.slope)
             else:
-                self.z_mean = MLP(data_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+                self.z_mean = MLP(self.data_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
         else:
             print("----------------------")
-            print(f"Using {'conditional' if cond_strnn is True else ''} StrNN")
+            print(f"Using {'conditional' if self.cond_strnn is True else ''} StrNN")
             if adjacency is not None:
                 print(f"Using {adjacency=}")
             print("----------------------")
-            print(f"{aux_dim=}")
+            print(f"{self.aux_dim=}")
 
             hidden_sizes = [
-                strnn_width for _ in range(strnn_layers)
+                self.strnn_width for _ in range(self.strnn_layers)
             ]
 
             from strnn.models.strNN import StrNN
 
-            if cond_strnn is True:
+            if self.cond_strnn is True:
 
                 if adjacency is None:
                     adjacency = torch.tril(
-                        torch.ones(latent_dim,
-                                   latent_dim)
+                        torch.ones(self.latent_dim,
+                                   self.latent_dim)
                     ).numpy()
 
                     # make it a chain
@@ -408,10 +413,10 @@ class cleanIVAE(nn.Module):
                         adjacency = np.tril(adjacency.T, k=1).T
 
                 strnn = ConditionalStrNN(
-                    nin=latent_dim,
+                    nin=self.latent_dim,
                     hidden_sizes=(tuple(hidden_sizes)),
-                    cond_features=aux_dim,
-                    nout=latent_dim,
+                    cond_features=self.aux_dim,
+                    nout=self.latent_dim,
                     opt_type="greedy",
                     adjacency=adjacency,
                     activation="leaky_relu",
@@ -422,24 +427,24 @@ class cleanIVAE(nn.Module):
                 self.z_mean = strnn
 
             else:
-                if separate_aux is False:
+                if self.separate_aux is False:
                     if adjacency is None:
                         adjacency = torch.tril(
-                            torch.ones(latent_dim + aux_dim,
-                                       latent_dim + aux_dim)
+                            torch.ones(self.latent_dim + self.aux_dim,
+                                       self.latent_dim + self.aux_dim)
                         ).numpy()
 
-                        adjacency[:, latent_dim:] = 1.
-                        adjacency[latent_dim:, :] = 1.
+                        adjacency[:, self.latent_dim:] = 1.
+                        adjacency[self.latent_dim:, :] = 1.
 
                     hidden_sizes = [
-                        (1 * hidden_dim) for _ in range(3)
+                        (1 * self.hidden_dim) for _ in range(3)
                     ]
 
                     strnn = StrNN(
-                        nin=latent_dim + aux_dim,
+                        nin=self.latent_dim + self.aux_dim,
                         hidden_sizes=(tuple(hidden_sizes)),
-                        nout=latent_dim + aux_dim,
+                        nout=self.latent_dim + self.aux_dim,
                         opt_type="greedy",
                         adjacency=adjacency,
                         activation="leaky_relu",
@@ -451,8 +456,8 @@ class cleanIVAE(nn.Module):
 
                     if adjacency is None:
                         adjacency = torch.tril(
-                            torch.ones(latent_dim,
-                                       latent_dim)
+                            torch.ones(self.latent_dim,
+                                       self.latent_dim)
                         ).numpy()
 
                         # make it a chain
@@ -462,16 +467,16 @@ class cleanIVAE(nn.Module):
                     if self.ignore_u is False:
 
                         if self.residual_aux:
-                            aux_net = MLP(aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+                            aux_net = MLP(self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
 
                         else:
-                            aux_net = MLP(aux_dim + latent_dim, latent_dim, hidden_dim, aux_net_layers,
-                                          activation=activation, slope=slope)
+                            aux_net = MLP(self.aux_dim + self.latent_dim, self.latent_dim, self.hidden_dim, self.aux_net_layers,
+                                          activation=self.activation, slope=self.slope)
 
                         strnn = StrNN(
-                            nin=latent_dim,
+                            nin=self.latent_dim,
                             hidden_sizes=(tuple(hidden_sizes)),
-                            nout=latent_dim,
+                            nout=self.latent_dim,
                             opt_type="greedy",
                             adjacency=adjacency,
                             activation="leaky_relu",
@@ -485,22 +490,20 @@ class cleanIVAE(nn.Module):
                             self.z_mean = nn.Sequential(*[aux_net, strnn])
                     else:
                         self.z_mean = StrNN(
-                            nin=latent_dim,
+                            nin=self.latent_dim,
                             hidden_sizes=(tuple(hidden_sizes)),
-                            nout=latent_dim,
+                            nout=self.latent_dim,
                             opt_type="greedy",
                             adjacency=adjacency,
                             activation="leaky_relu",
                             init_type="ian_uniform",
                             norm_type="batch",
                         )
-
-
-        if ignore_u is False:
-            self.z_log_var = MLP(data_dim + aux_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
+        if self.ignore_u is False:
+            self.z_log_var = MLP(self.data_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
+                                 slope=self.slope)
         else:
-            self.z_log_var = MLP(data_dim, latent_dim, hidden_dim, n_layers, activation=activation, slope=slope)
-
+            self.z_log_var = MLP(self.data_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
 
     @staticmethod
     def reparameterize(mu, v):
