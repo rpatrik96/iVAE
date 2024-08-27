@@ -386,16 +386,23 @@ class cleanIVAE(nn.Module):
     def _setup_obs_unmixing(self):
         if self.obs_layers is not None:
             obs_unmixing = []
-            for _ in range(self.obs_layers - 1):
+
+            if self.obs_layers > 1:
+                for _ in range(self.obs_layers - 1):
+                    obs_unmixing.append(
+                        nn.Linear(self.data_dim, self.hidden_dim, bias=False)
+                    )
+                    obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
+
                 obs_unmixing.append(
-                    nn.Linear(self.data_dim, self.hidden_dim, bias=False)
+                    nn.Linear(self.hidden_dim, self.latent_dim, bias=False)
                 )
                 obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
-
-            obs_unmixing.append(
-                nn.Linear(self.hidden_dim, self.latent_dim, bias=False)
-            )
-            obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
+            else:
+                obs_unmixing.append(
+                    nn.Linear(self.data_dim, self.latent_dim, bias=False)
+                )
+                obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
 
             self.obs_unmixing = nn.Sequential(
                 *obs_unmixing,
@@ -404,7 +411,7 @@ class cleanIVAE(nn.Module):
             self.obs_unmixing = None
 
     def _setup_encoder(self, adjacency):
-        in_dim = self.latent_dim if self.obs_unmixing is None else self.data_dim
+        in_dim = self.data_dim if self.obs_unmixing is None else self.latent_dim
         if self.use_strnn is False:
             if self.ignore_u is False:
                 self.z_mean = MLP(in_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
@@ -577,6 +584,7 @@ class cleanIVAE(nn.Module):
         l = self.prior(u)
         if self.obs_unmixing is not None:
             z_hat = self.obs_unmixing(x)
+            x = z_hat
         else:
             z_hat = None
         s_mean, s_var = self.encoder(x, u)

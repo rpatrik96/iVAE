@@ -412,7 +412,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         )
 
         with torch.no_grad():
-            X = obs_mixing(torch.from_numpy(X)).numpy()
+            X = obs_mixing(torch.from_numpy(X).float()).numpy()
 
 
     # add noise:
