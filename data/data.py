@@ -13,6 +13,7 @@ import os
 import numpy as np
 import scipy
 import torch
+import torch.nn as nn
 from scipy.stats import hypsecant
 from strnn import StrNN
 from torch.utils.data import Dataset
@@ -202,7 +203,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
                   seed=10, slope=.1, var_bounds=np.array([0.5, 3]), lin_type='uniform', n_iter_4_cond=1e4,
                   dtype=np.float32, noisy=0, uncentered=False, centers=None, staircase=False, discrete=False,
                   one_hot_labels=True, repeat_linearity=False, use_sem=False, chain=False, adjacency=None,
-                  dag_mask_prob=0.65):
+                  dag_mask_prob=0.65, obs_mixing_layers=None):
     """
     Generate artificial data with arbitrary mixing
     @param int n_per_seg: number of observations per segment
@@ -386,6 +387,32 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
             else:
                 X = act_f(np.dot(X, B))
 
+    if obs_mixing_layers is not None:
+        obs_mixing = [
+            nn.Linear(
+                d_sources,
+                d_data,
+                bias=False,
+            ),
+            nn.LeakyReLU(negative_slope=0.25)
+        ]
+        nn.init.orthogonal_(obs_mixing[0].weight.data)
+
+        for _ in range(obs_mixing_layers - 1):
+            obs_mixing.append(
+                nn.Linear(d_data,d_data, bias=False)
+            )
+            nn.init.orthogonal_(obs_mixing[-1].weight.data)
+
+            obs_mixing.append(nn.LeakyReLU(negative_slope=0.25))
+
+        obs_mixing = nn.Sequential(
+            *obs_mixing,
+        )
+
+        with torch.no_grad():
+            X = obs_mixing(torch.from_numpy(X)).numpy()
+
     # add noise:
     if float(noisy) != 0:
         X += noisy * np.random.randn(*X.shape)
@@ -427,7 +454,7 @@ class SyntheticDataset(Dataset):
     def __init__(self, root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior, act_fn,
                  uncentered=False, noisy=False, centers=None,
                  double=False, one_hot_labels=True, use_sem=False, chain=False, staircase=False, adjacency=None,
-                 dag_mask_prob=0.65):
+                 dag_mask_prob=0.65, obs_mixing_layers=None):
         self.root = root
 
         # create root dir if not exists
@@ -437,7 +464,7 @@ class SyntheticDataset(Dataset):
         data = self.load_tcl_data(root, num_per_segment, num_segment, d_sources, d_data, num_layers, seed, prior,
                                   act_fn, uncentered, noisy, centers,
                                   one_hot_labels, use_sem=use_sem, chain=chain, staircase=staircase,
-                                  adjacency=adjacency, dag_mask_prob=dag_mask_prob)
+                                  adjacency=adjacency, dag_mask_prob=dag_mask_prob, obs_mixing_layers=obs_mixing_layers)
         self.data = data
         self.s = torch.from_numpy(data['s'])
         self.x = torch.from_numpy(data['x'])
@@ -478,7 +505,7 @@ class SyntheticDataset(Dataset):
     @staticmethod
     def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered,
                       noisy, centers, one_hot_labels,
-                      use_sem=False, chain=False, staircase=False, adjacency=None, dag_mask_prob=0.65):
+                      use_sem=False, chain=False, staircase=False, adjacency=None, dag_mask_prob=0.65, obs_mixing_layers=None):
         path_to_dataset = root + 'tcl_' + '_'.join(
             [str(n_per_seg), str(n_seg), str(d_sources), str(d_data), str(num_layers), str(seed), prior, activation_fn])
         if uncentered:
@@ -495,6 +522,10 @@ class SyntheticDataset(Dataset):
                     path_to_dataset += f'_dag_{int(100*dag_mask_prob)}'
         if chain:
             path_to_dataset += '_chain'
+
+        if obs_mixing_layers is not None:
+            path_to_dataset += '_crl'
+
         if one_hot_labels:
             path_to_dataset += '_onehot'
         path_to_dataset += '.npz'
@@ -506,7 +537,7 @@ class SyntheticDataset(Dataset):
                       "noisy": noisy,
                       "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels,
                       "use_sem": use_sem,
-                      "chain": chain, "staircase": staircase, "adjacency": adjacency, "dag_mask_prob": dag_mask_prob}
+                      "chain": chain, "staircase": staircase, "adjacency": adjacency, "dag_mask_prob": dag_mask_prob, "obs_mixing_layers": obs_mixing_layers}
             save_data(path_to_dataset, **kwargs)
         print('loading data from {}'.format(path_to_dataset))
         return np.load(path_to_dataset)

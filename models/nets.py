@@ -349,7 +349,7 @@ class ResidualStrNN(nn.Module):
 class cleanIVAE(nn.Module):
     def __init__(self, data_dim, latent_dim, aux_dim, n_layers=3, activation='xtanh', hidden_dim=50, slope=.1,
                  use_strnn=False, separate_aux=False, residual_aux=False, use_chain=False,
-                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False, cond_strnn=False, adjacency=None):
+                 strnn_layers=1, strnn_width=40, aux_net_layers=1, ignore_u=False, cond_strnn=False, adjacency=None, obs_layers=None):
         super().__init__()
         self.data_dim = data_dim
         self.latent_dim = latent_dim
@@ -367,7 +367,7 @@ class cleanIVAE(nn.Module):
         self.decoder_var = .1 * torch.ones(1)
         # encoder params
 
-        self.sep_aux = separate_aux
+        self.separate_aux = separate_aux
         self.residual_aux = residual_aux
         self.use_strnn = use_strnn
         self.use_chain = use_chain
@@ -375,17 +375,42 @@ class cleanIVAE(nn.Module):
         self.strnn_width = strnn_width
         self.ignore_u = ignore_u
         self.cond_strnn = cond_strnn
+        self.obs_layers = obs_layers
         self.aux_net_layers = aux_net_layers
 
+        self._setup_obs_unmixing()
         self._setup_encoder(adjacency)
 
+        self._setup_obs_unmixing()
+
+    def _setup_obs_unmixing(self):
+        if self.obs_layers is not None:
+            obs_unmixing = []
+            for _ in range(self.obs_layers - 1):
+                obs_unmixing.append(
+                    nn.Linear(self.obs_dim, self.obs_dim, bias=False)
+                )
+                obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
+
+            obs_unmixing.append(
+                nn.Linear(self.obs_dim, self.latent_dim, bias=False)
+            )
+            obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
+
+            self.obs_unmixing = nn.Sequential(
+                *obs_unmixing,
+            )
+        else:
+            self.obs_unmixing = None
+
     def _setup_encoder(self, adjacency):
+        in_dim = self.latent_dim if self.obs_unmixing is None else self.data_dim
         if self.use_strnn is False:
             if self.ignore_u is False:
-                self.z_mean = MLP(self.data_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
+                self.z_mean = MLP(in_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
                                   slope=self.slope)
             else:
-                self.z_mean = MLP(self.data_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
+                self.z_mean = MLP(in_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
         else:
             print("----------------------")
             print(f"Using {'conditional' if self.cond_strnn is True else ''} StrNN")
@@ -413,7 +438,7 @@ class cleanIVAE(nn.Module):
                         adjacency = np.tril(adjacency.T, k=1).T
 
                 strnn = ConditionalStrNN(
-                    nin=self.latent_dim,
+                    nin=in_dim,
                     hidden_sizes=(tuple(hidden_sizes)),
                     cond_features=self.aux_dim,
                     nout=self.latent_dim,
@@ -430,7 +455,7 @@ class cleanIVAE(nn.Module):
                 if self.separate_aux is False:
                     if adjacency is None:
                         adjacency = torch.tril(
-                            torch.ones(self.latent_dim + self.aux_dim,
+                            torch.ones(in_dim + self.aux_dim,
                                        self.latent_dim + self.aux_dim)
                         ).numpy()
 
@@ -442,7 +467,7 @@ class cleanIVAE(nn.Module):
                     ]
 
                     strnn = StrNN(
-                        nin=self.latent_dim + self.aux_dim,
+                        nin=in_dim + self.aux_dim,
                         hidden_sizes=(tuple(hidden_sizes)),
                         nout=self.latent_dim + self.aux_dim,
                         opt_type="greedy",
@@ -456,7 +481,7 @@ class cleanIVAE(nn.Module):
 
                     if adjacency is None:
                         adjacency = torch.tril(
-                            torch.ones(self.latent_dim,
+                            torch.ones(in_dim,
                                        self.latent_dim)
                         ).numpy()
 
@@ -470,11 +495,11 @@ class cleanIVAE(nn.Module):
                             aux_net = MLP(self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
 
                         else:
-                            aux_net = MLP(self.aux_dim + self.latent_dim, self.latent_dim, self.hidden_dim, self.aux_net_layers,
+                            aux_net = MLP(self.aux_dim +in_dim, self.latent_dim, self.hidden_dim, self.aux_net_layers,
                                           activation=self.activation, slope=self.slope)
 
                         strnn = StrNN(
-                            nin=self.latent_dim,
+                            nin=in_dim,
                             hidden_sizes=(tuple(hidden_sizes)),
                             nout=self.latent_dim,
                             opt_type="greedy",
@@ -490,7 +515,7 @@ class cleanIVAE(nn.Module):
                             self.z_mean = nn.Sequential(*[aux_net, strnn])
                     else:
                         self.z_mean = StrNN(
-                            nin=self.latent_dim,
+                            nin=in_dim,
                             hidden_sizes=(tuple(hidden_sizes)),
                             nout=self.latent_dim,
                             opt_type="greedy",
@@ -500,10 +525,10 @@ class cleanIVAE(nn.Module):
                             norm_type="batch",
                         )
         if self.ignore_u is False:
-            self.z_log_var = MLP(self.data_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
+            self.z_log_var = MLP(in_dim + self.aux_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation,
                                  slope=self.slope)
         else:
-            self.z_log_var = MLP(self.data_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
+            self.z_log_var = MLP(in_dim, self.latent_dim, self.hidden_dim, self.n_layers, activation=self.activation, slope=self.slope)
 
     @staticmethod
     def reparameterize(mu, v):
@@ -512,6 +537,9 @@ class cleanIVAE(nn.Module):
         return scaled.add(mu)
 
     def encoder(self, x, u):
+        if self.obs_unmixing is not None:
+            x = self.obs_unmixing(x)
+
         xu = torch.cat((x, u), 1).float()
         if self.use_strnn is False:
             if self.ignore_u is False:
@@ -523,7 +551,7 @@ class cleanIVAE(nn.Module):
                 z_mean = self.z_mean(x.float(), u)
             else:
                 if self.ignore_u is False:
-                    if self.sep_aux is False:
+                    if self.separate_aux is False:
                         z_mean = self.z_mean(xu)[:, :self.latent_dim]
                     else:
                         if self.residual_aux:

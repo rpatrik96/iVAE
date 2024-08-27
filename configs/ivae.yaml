@@ -14,6 +14,7 @@ one_hot_labels: false
 chain: false
 use_sem: true
 dag_mask_prob: .25
+obs_mixing_layers: 1
 
 # IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
 # residual StrNNs help when labels are not one-hot
