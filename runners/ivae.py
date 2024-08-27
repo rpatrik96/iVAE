@@ -203,7 +203,7 @@ def runner(args, config, verbose=False):
             if wandb.run:
                 wandb.log({'val_loss': val_loss, 'val_mcc': val_perf})
                 if z is not None:
-                    wandb.log({'val_mcc_z': val_perf})
+                    wandb.log({'val_mcc_z': val_perf_z})
 
     print('\ntotal runtime: {}'.format(time.time() - st))
 
