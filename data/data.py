@@ -377,15 +377,17 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         else:
             X = act_f(np.dot(S, A))
 
-        if d_sources != d_data:
-            B = generate_mixing_matrix(d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
-        else:
-            B = A
-        for nl in range(1, n_layers):
-            if nl == n_layers - 1:
-                X = np.dot(X, B)
+            if d_sources != d_data and obs_mixing_layers is None:
+                B = generate_mixing_matrix(d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
             else:
-                X = act_f(np.dot(X, B))
+                B = A
+
+
+            for nl in range(1, n_layers):
+                if nl == n_layers - 1:
+                    X = np.dot(X, B)
+                else:
+                    X = act_f(np.dot(X, B))
 
     Z = X.copy()
     if obs_mixing_layers is not None:

@@ -15,13 +15,13 @@ parameters:
   num_per_segment:
     value: 1500
   num_segments:
-    value: 40  # -> for a small amount of segments, StrNN seem to work better
+    value: -1  # -> for a small amount of segments, StrNN seem to work better
   source_dim:
     value: 5
   data_dim:
     value: 8
   nl:
-    value: 1
+    value: 2
   obs_mixing_layers:
     value: 2
   data_seed:
@@ -43,7 +43,7 @@ parameters:
   chain:
     value: false
   dag_mask_prob:
-    value: 0.05
+    values: [.2, .5, .8]
   data_path:
     value: 'run/datasets/'
   # model args
@@ -52,7 +52,7 @@ parameters:
   aux_net_layers:
     value: 3
   strnn_layers:
-    value: 2
+    value: 3
   obs_layers:
     value: 3
   hidden_dim:

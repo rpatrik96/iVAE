@@ -1,8 +1,8 @@
 # dataset
 num_per_segment: 1000
-num_segments: 5  # -> for a small amount of segments, StrNN seem to work better
-source_dim: 2
-data_dim: 2
+num_segments: 16  # -> for a small amount of segments, StrNN seem to work better
+source_dim: 5
+data_dim: 8
 nl: 2
 data_seed: 1
 prior: 'gauss'
@@ -13,8 +13,8 @@ staircase: false
 one_hot_labels: false
 chain: false
 use_sem: true
-dag_mask_prob: .25
-obs_mixing_layers: 1
+dag_mask_prob: .05
+obs_mixing_layers: 2
 
 # IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
 # residual StrNNs help when labels are not one-hot
@@ -36,7 +36,7 @@ batch_norm: false
 tcl: false
 use_strnn: true
 cond_strnn: false
-strnn_adjacency_override: true
+strnn_adjacency_override: false
 separate_aux: true
 residual_aux: false
 ignore_u: false
