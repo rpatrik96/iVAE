@@ -260,7 +260,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
     if not repeat_linearity:
         X = S.copy()
         for nl in range(n_layers):
-            A = generate_mixing_matrix(X.shape[1], d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
+            A = generate_mixing_matrix(X.shape[1], d_data if obs_mixing_layers is None else X.shape[1], lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
                                        staircase=staircase)
             if use_sem:
                 if n_layers == 1:
@@ -322,7 +322,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
     else:
         # assert n_layers > 1  # suppose we always have at least 2 layers. The last layer doesn't have a non-linearity
-        A = generate_mixing_matrix(d_sources, d_data, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
+        A = generate_mixing_matrix(d_sources, d_data if obs_mixing_layers is None else d_sources, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
         if use_sem:
             A = np.abs(A)
 
@@ -387,6 +387,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
             else:
                 X = act_f(np.dot(X, B))
 
+    Z = X.copy()
     if obs_mixing_layers is not None:
         obs_mixing = [
             nn.Linear(
@@ -413,6 +414,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
         with torch.no_grad():
             X = obs_mixing(torch.from_numpy(X)).numpy()
 
+
     # add noise:
     if float(noisy) != 0:
         X += noisy * np.random.randn(*X.shape)
@@ -423,30 +425,31 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
     if not batch_size:
         if one_hot_labels:
             U = to_one_hot([U], m=n_seg)[0]
-        return S, X, U, M, L, adjacency
+        return S, Z, X, U, M, L, adjacency
     else:
         idx = np.random.permutation(n)
-        Xb, Sb, Ub, Mb, Lb = [], [], [], [], []
+        Xb, Sb, Zb, Ub, Mb, Lb = [], [], [], [], [], []
         n_batches = int(n / batch_size)
         for c in range(n_batches):
             Sb += [S[idx][c * batch_size:(c + 1) * batch_size]]
+            Zb += [Z[idx][c * batch_size:(c + 1) * batch_size]]
             Xb += [X[idx][c * batch_size:(c + 1) * batch_size]]
             Ub += [U[idx][c * batch_size:(c + 1) * batch_size]]
             Mb += [M[idx][c * batch_size:(c + 1) * batch_size]]
             Lb += [L[idx][c * batch_size:(c + 1) * batch_size]]
         if one_hot_labels:
             Ub = to_one_hot(Ub, m=n_seg)
-        return Sb, Xb, Ub, Mb, Lb, adjacency
+        return Sb, Zb, Xb, Ub, Mb, Lb, adjacency
 
 
 def save_data(path, *args, **kwargs):
     kwargs['batch_size'] = 0  # leave batch creation to torch DataLoader
-    S, X, U, M, L, adjacency = generate_data(**kwargs)
+    S, Z, X, U, M, L, adjacency = generate_data(**kwargs)
     print('Creating dataset {} ...'.format(path))
     dir_path = '/'.join(path.split('/')[:-1])
     if not os.path.exists(dir_path):
         os.makedirs('/'.join(path.split('/')[:-1]))
-    np.savez_compressed(path, s=S, x=X, u=U, m=M, L=L, adjacency=adjacency)
+    np.savez_compressed(path, s=S, z=Z, x=X, u=U, m=M, L=L, adjacency=adjacency)
     print(' ... done')
 
 
@@ -467,6 +470,7 @@ class SyntheticDataset(Dataset):
                                   adjacency=adjacency, dag_mask_prob=dag_mask_prob, obs_mixing_layers=obs_mixing_layers)
         self.data = data
         self.s = torch.from_numpy(data['s'])
+        self.z = torch.from_numpy(data['z'])
         self.x = torch.from_numpy(data['x'])
         self.u = torch.from_numpy(data['u'])
         if len(self.u.shape) == 1:
@@ -496,11 +500,11 @@ class SyntheticDataset(Dataset):
 
     def __getitem__(self, index):
         if not self.double:
-            return self.x[index], self.u[index], self.s[index]
+            return self.x[index], self.u[index], self.s[index], self.z[index]
         else:
             indices = range(len(self))
             index2 = np.random.choice(indices)
-            return self.x[index], self.x[index2], self.u[index], self.s[index]
+            return self.x[index], self.x[index2], self.u[index], self.s[index], self.z[index]
 
     @staticmethod
     def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered,

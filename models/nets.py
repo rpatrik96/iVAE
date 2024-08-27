@@ -388,12 +388,12 @@ class cleanIVAE(nn.Module):
             obs_unmixing = []
             for _ in range(self.obs_layers - 1):
                 obs_unmixing.append(
-                    nn.Linear(self.obs_dim, self.obs_dim, bias=False)
+                    nn.Linear(self.data_dim, self.hidden_dim, bias=False)
                 )
                 obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
 
             obs_unmixing.append(
-                nn.Linear(self.obs_dim, self.latent_dim, bias=False)
+                nn.Linear(self.hidden_dim, self.latent_dim, bias=False)
             )
             obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
 
@@ -537,8 +537,6 @@ class cleanIVAE(nn.Module):
         return scaled.add(mu)
 
     def encoder(self, x, u):
-        if self.obs_unmixing is not None:
-            x = self.obs_unmixing(x)
 
         xu = torch.cat((x, u), 1).float()
         if self.use_strnn is False:
@@ -577,25 +575,29 @@ class cleanIVAE(nn.Module):
 
     def forward(self, x, u):
         l = self.prior(u)
-        z_mean, z_var = self.encoder(x, u)
-        z_hat = self.reparameterize(z_mean, z_var)
-        x_hat = self.decoder(z_hat)
-        return x_hat, z_mean, z_var, z_hat, l
+        if self.obs_unmixing is not None:
+            z_hat = self.obs_unmixing(x)
+        else:
+            z_hat = None
+        s_mean, s_var = self.encoder(x, u)
+        s_hat = self.reparameterize(s_mean, s_var)
+        x_hat = self.decoder(s_hat)
+        return x_hat, s_mean, s_var, s_hat, l, z_hat
 
     def elbo(self, x, u, N, a=1., b=1., c=1., d=1.):
-        x_hat, z_mean, z_var, z_hat, l = self.forward(x, u)
-        M, d_latent = z_hat.size()
+        x_hat, s_mean, s_var, s_hat, l, z_hat = self.forward(x, u)
+        M, d_latent = s_hat.size()
         logpx = log_normal(x, x_hat, self.decoder_var.to(x.device)).sum(dim=-1)
-        logqs_cux = log_normal(z_hat, z_mean, z_var).sum(dim=-1)
-        logps_cu = log_normal(z_hat, None, l).sum(dim=-1)
+        logqs_cux = log_normal(s_hat, s_mean, s_var).sum(dim=-1)
+        logps_cu = log_normal(s_hat, None, l).sum(dim=-1)
 
         # no view for v to account for case where it is a float. It works for general case because mu shape is (1, M, d)
-        logqs_tmp = log_normal(z_hat.view(M, 1, d_latent), z_mean.view(1, M, d_latent), z_var.view(1, M, d_latent))
+        logqs_tmp = log_normal(s_hat.view(M, 1, d_latent), s_mean.view(1, M, d_latent), s_var.view(1, M, d_latent))
         logqs = torch.logsumexp(logqs_tmp.sum(dim=-1), dim=1, keepdim=False) - np.log(M * N)
         logqs_i = (torch.logsumexp(logqs_tmp, dim=1, keepdim=False) - np.log(M * N)).sum(dim=-1)
 
         elbo = -(a * logpx - b * (logqs_cux - logqs) - c * (logqs - logqs_i) - d * (logqs_i - logps_cu)).mean()
-        return elbo, z_hat
+        return elbo, s_hat, z_hat
 
 
 class cleanVAE(nn.Module):

@@ -38,7 +38,8 @@ def runner(args, config, verbose=False):
                                   config.nl, config.data_seed, config.prior,
                                   config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
                                   use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                  staircase=config.staircase, dag_mask_prob=config.dag_mask_prob, obs_mixing_layers=config.obs_mixing_layers)
+                                  staircase=config.staircase, dag_mask_prob=config.dag_mask_prob,
+                                  obs_mixing_layers=config.obs_mixing_layers)
 
     # use different seed for validation set
     # ensure that both have the same adjacency matrix
@@ -67,7 +68,8 @@ def runner(args, config, verbose=False):
                           strnn_width=config.strnn_width, strnn_layers=config.strnn_layers,
                           aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u,
                           cond_strnn=config.cond_strnn,
-                          adjacency=dset_train.adjacency if config.strnn_adjacency_override is True else None).to(
+                          adjacency=dset_train.adjacency if config.strnn_adjacency_override is True else None,
+                          obs_layers=config.obs_layers).to(
             config.device)
     else:
         model = cleanVAE(data_dim=d_data, latent_dim=d_latent, hidden_dim=config.hidden_dim,
@@ -82,6 +84,7 @@ def runner(args, config, verbose=False):
 
     loss_hist = []
     perf_hist = []
+    perf_hist_z = []
     for epoch in range(1, config.epochs + 1):
         model.train()
 
@@ -103,16 +106,17 @@ def runner(args, config, verbose=False):
 
         train_loss = 0
         train_perf = 0
+        train_perf_z = 0
         for i, data in enumerate(source_dim_train):
             if not factor:
-                x, u, s_true = data
+                x, u, s_true, z_true = data
             else:
-                x, x2, u, s_true = data
+                x, x2, u, s_true, z_true = data
             x, u = x.to(config.device), u.to(config.device)
             optimizer.zero_grad()
-            loss, z = model.elbo(x, u, len(dset_train), a=a, b=b, c=c, d=d)
+            loss, s, z = model.elbo(x, u, len(dset_train), a=a, b=b, c=c, d=d)
             if factor:
-                D_z = D(z)
+                D_z = D(s)
                 vae_tc_loss = (D_z[:, :1] - D_z[:, 1:]).mean()
                 loss += config.gamma * vae_tc_loss
 
@@ -120,10 +124,16 @@ def runner(args, config, verbose=False):
 
             train_loss += loss.item()
             try:
-                perf = mcc(s_true.numpy(), z.cpu().detach().numpy())
+                perf = mcc(s_true.numpy(), s.cpu().detach().numpy())
             except:
                 perf = 0
             train_perf += perf
+
+            try:
+                perf = mcc(z_true.numpy(), z.cpu().detach().numpy())
+            except:
+                perf = 0
+            train_perf_z += perf
 
             optimizer.step()
 
@@ -141,7 +151,9 @@ def runner(args, config, verbose=False):
                 optim_D.step()
 
         train_perf /= len(source_dim_train)
+        train_perf_z /= len(source_dim_train)
         perf_hist.append(train_perf)
+        perf_hist_z.append(train_perf_z)
         train_loss /= len(source_dim_train)
         loss_hist.append(train_loss)
         if verbose:
@@ -153,6 +165,9 @@ def runner(args, config, verbose=False):
 
         if wandb.run:
             wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
+            if z is not None:
+                wandb.log({'train_mcc_z': train_perf_z})
+
 
         if not config.no_scheduler:
             scheduler.step(train_loss)
@@ -161,40 +176,51 @@ def runner(args, config, verbose=False):
             model.eval()
             val_loss = 0
             val_perf = 0
+            val_perf_z = 0
             for i, data in enumerate(source_dim_val):
                 if not factor:
-                    x, u, s_true = data
+                    x, u, s_true, z_true = data
                 else:
-                    x, x2, u, s_true = data
+                    x, x2, u, s_true, z_true = data
                 x, u = x.to(config.device), u.to(config.device)
-                loss, z = model.elbo(x, u, len(dset_train), a=a, b=b, c=c, d=d)
+                loss, s, z = model.elbo(x, u, len(dset_train), a=a, b=b, c=c, d=d)
                 if factor:
-                    D_z = D(z)
+                    D_z = D(s)
                     vae_tc_loss = (D_z[:, :1] - D_z[:, 1:]).mean()
                     loss += config.gamma * vae_tc_loss
 
                 val_loss += loss.item()
                 try:
-                    perf = mcc(s_true.numpy(), z.cpu().detach().numpy())
+                    perf = mcc(s_true.numpy(), s.cpu().detach().numpy())
                 except:
                     perf = 0
                 val_perf += perf
 
+                try:
+                    perf = mcc(z_true.numpy(), z.cpu().detach().numpy())
+                except:
+                    perf = 0
+                val_perf_z += perf
+
             val_perf /= len(source_dim_val)
+            val_perf_z /= len(source_dim_val)
             val_loss /= len(source_dim_val)
             if verbose:
                 print('==> Epoch {}/{}:\tval loss: {:.6f}\tval perf: {:.6f}'.format(epoch, config.epochs, val_loss,
                                                                                     val_perf))
             if wandb.run:
                 wandb.log({'val_loss': val_loss, 'val_mcc': val_perf})
+                if z is not None:
+                    wandb.log({'val_mcc_z': val_perf})
+
     print('\ntotal runtime: {}'.format(time.time() - st))
 
     # evaluate perf on full dataset
     Xt, Ut, St = dset_train.x.to(config.device), dset_train.u.to(config.device), dset_train.s
     if config.ica:
-        _, _, _, s, _ = model(Xt, Ut)
+        _, _, _, s, _, z = model(Xt, Ut)
     else:
-        _, _, _, s = model(Xt)
+        _, _, _, s, z = model(Xt)
     full_perf = mcc(dset_train.s.numpy(), s.cpu().detach().numpy())
     perfs.append(full_perf)
     loss_hists.append(loss_hist)
