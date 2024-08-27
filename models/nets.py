@@ -385,12 +385,12 @@ class cleanIVAE(nn.Module):
         if self.obs_layers is not None:
             obs_unmixing = []
 
-            if self.obs_layers > 1:
+            if self.obs_layers >= 2:
                 obs_unmixing.append(
                     nn.Linear(self.data_dim, self.hidden_dim, bias=False)
                 )
                 obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
-                for _ in range(1, self.obs_layers - 2):
+                for _ in range(0, self.obs_layers - 2):
                     obs_unmixing.append(
                         nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
                     )
