@@ -105,6 +105,7 @@ if __name__ == '__main__':
             config = yaml.load(file, Loader=yaml.FullLoader)
 
 
-        sweep_id = wandb.sweep(config, project="ivae")
+        # sweep_id = wandb.sweep(config, project="ivae")
+        sweep_id = "1pccuxls"
 
         wandb.agent(sweep_id, function=main_sweep, project="ivae")
