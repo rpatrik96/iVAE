@@ -52,9 +52,9 @@ parameters:
   aux_net_layers:
     value: 3
   strnn_layers:
-    value: 3
+    values: [2, 3]
   obs_layers:
-    values: [1, 2, 3]
+    values: [2, 3]
   hidden_dim:
     value: 100
   strnn_width:
@@ -72,9 +72,9 @@ parameters:
   tcl:
     value: false
   use_strnn:
-    values: [true,false]
+    value: true
   strnn_adjacency_override:
-    value: false
+    value: true
   cond_strnn:
     value: false
   separate_aux:

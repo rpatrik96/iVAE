@@ -10,12 +10,12 @@ parameters:
   tcl:
     value: false
   seed:
-    values: [42, 64, 982, 5748, 23567, 8734, 564, 74452, 96, 26]
+    values: [42, 64, 982, 5748, 23567] #, 8734, 564, 74452, 96, 26]
   # dataset
   num_per_segment:
     value: 1000
   num_segments:
-    value: 10  # -> for a small amount of segments, StrNN seem to work better
+    value: 40  # -> for a small amount of segments, StrNN seem to work better
   source_dim:
     value: 5
   data_dim:
@@ -29,17 +29,17 @@ parameters:
   act:
     value: 'xtanh'
   uncentered:
-    value: false
+    value: true
   noisy:
-    values: [0, 1, 2]
+    values: [2, 4]
   staircase:
     value: false
   one_hot_labels:
-    values: [true, false]
+    value: true
   use_sem:
     value: true
   chain:
-    value: true
+    value: false
   dag_mask_prob:
     value: 0.65
   data_path:

@@ -381,16 +381,18 @@ class cleanIVAE(nn.Module):
         self._setup_obs_unmixing()
         self._setup_encoder(adjacency)
 
-        self._setup_obs_unmixing()
-
     def _setup_obs_unmixing(self):
         if self.obs_layers is not None:
             obs_unmixing = []
 
             if self.obs_layers > 1:
-                for _ in range(self.obs_layers - 1):
+                obs_unmixing.append(
+                    nn.Linear(self.data_dim, self.hidden_dim, bias=False)
+                )
+                obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
+                for _ in range(1, self.obs_layers - 2):
                     obs_unmixing.append(
-                        nn.Linear(self.data_dim, self.hidden_dim, bias=False)
+                        nn.Linear(self.hidden_dim, self.hidden_dim, bias=False)
                     )
                     obs_unmixing.append(nn.LeakyReLU(negative_slope=0.25))
 
