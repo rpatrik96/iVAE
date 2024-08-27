@@ -34,23 +34,16 @@ def runner(args, config, verbose=False):
     else:
         data_dim = config.data_dim
 
-    dset_train = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim,
-                                  config.nl, config.data_seed, config.prior,
-                                  config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
-                                  use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                  staircase=config.staircase, dag_mask_prob=config.dag_mask_prob,
-                                  obs_mixing_layers=config.obs_mixing_layers)
+    dset = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim,
+                            config.nl, config.data_seed, config.prior,
+                            config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
+                            use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
+                            staircase=config.staircase, dag_mask_prob=config.dag_mask_prob,
+                            obs_mixing_layers=config.obs_mixing_layers)
 
-    # use different seed for validation set
-    # ensure that both have the same adjacency matrix
-    dset_val = SyntheticDataset(data_path, config.num_per_segment, num_segments, config.source_dim, data_dim, config.nl,
-                                config.data_seed + 1752, config.prior,
-                                config.act, uncentered=config.uncentered, noisy=config.noisy, double=factor,
-                                use_sem=config.use_sem, one_hot_labels=config.one_hot_labels, chain=config.chain,
-                                staircase=config.staircase, adjacency=dset_train.adjacency,
-                                dag_mask_prob=config.dag_mask_prob, obs_mixing_layers=config.obs_mixing_layers)
+    dset_train, dset_val = torch.utils.data.random_split(dset, [.7, .3])
 
-    d_data, d_latent, d_aux = dset_train.get_dims()
+    d_data, d_latent, d_aux = dset.get_dims()
 
     loader_params = {'num_workers': 6, 'pin_memory': True} if torch.cuda.is_available() else {}
     source_dim_train = DataLoader(dset_train, batch_size=config.batch_size, shuffle=True, drop_last=True,
@@ -68,7 +61,7 @@ def runner(args, config, verbose=False):
                           strnn_width=config.strnn_width, strnn_layers=config.strnn_layers,
                           aux_net_layers=config.aux_net_layers, ignore_u=config.ignore_u,
                           cond_strnn=config.cond_strnn,
-                          adjacency=dset_train.adjacency if config.strnn_adjacency_override is True else None,
+                          adjacency=dset.adjacency if config.strnn_adjacency_override is True else None,
                           obs_layers=config.obs_layers).to(
             config.device)
     else:
@@ -167,7 +160,6 @@ def runner(args, config, verbose=False):
             wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
             if z is not None:
                 wandb.log({'train_mcc_z': train_perf_z})
-
 
         if not config.no_scheduler:
             scheduler.step(train_loss)
