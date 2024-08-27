@@ -213,7 +213,7 @@ def runner(args, config, verbose=False):
         _, _, _, s, _, z = model(Xt, Ut)
     else:
         _, _, _, s, z = model(Xt)
-    full_perf = mcc(dset_train.s.numpy(), s.cpu().detach().numpy())
+    full_perf = mcc(dset_train.dataset.s.numpy(), s.cpu().detach().numpy())
     perfs.append(full_perf)
     loss_hists.append(loss_hist)
     perf_hists.append(perf_hist)
