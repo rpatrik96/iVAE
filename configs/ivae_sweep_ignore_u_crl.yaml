@@ -10,10 +10,10 @@ parameters:
   tcl:
     value: false
   seed:
-    values: [42, 64, 982, 5748, 23567] #, 8734, 564, 74452, 96, 26]
+    values: [42, 64, 982, 5748, 23567, 8734, 564, 74452, 96, 26]
   # dataset
   num_per_segment:
-    value: 1000
+    value: 1500
   num_segments:
     value: 40  # -> for a small amount of segments, StrNN seem to work better
   source_dim:
@@ -23,7 +23,7 @@ parameters:
   nl:
     value: 1
   obs_mixing_layers:
-    value: 1
+    value: 2
   data_seed:
     value: 1
   prior:
@@ -48,13 +48,13 @@ parameters:
     value: 'run/datasets/'
   # model args
   n_layers:
-    value: 3
+    value: 2
   aux_net_layers:
     value: 3
   strnn_layers:
-    values: [2, 3]
+    value: 2
   obs_layers:
-    values: [2, 3]
+    value: 3
   hidden_dim:
     value: 100
   strnn_width:
@@ -72,9 +72,9 @@ parameters:
   tcl:
     value: false
   use_strnn:
-    value: true
+    values: [true, false]
   strnn_adjacency_override:
-    value: true
+    value: false
   cond_strnn:
     value: false
   separate_aux:
