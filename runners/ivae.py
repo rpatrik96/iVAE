@@ -208,7 +208,7 @@ def runner(args, config, verbose=False):
     print('\ntotal runtime: {}'.format(time.time() - st))
 
     # evaluate perf on full dataset
-    Xt, Ut, St = dset_train.x.to(config.device), dset_train.u.to(config.device), dset_train.s
+    Xt, Ut, St = dset_train.dataset.x.to(config.device), dset_train.dataset.u.to(config.device), dset_train.dataset.s
     if config.ica:
         _, _, _, s, _, z = model(Xt, Ut)
     else:
