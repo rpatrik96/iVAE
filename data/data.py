@@ -256,52 +256,48 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
     else:
         raise ValueError('incorrect non linearity: {}'.format(activation))
 
+    if adjacency is None:
+
+        adjacency = torch.tril(
+            (torch.bitwise_not(
+                torch.tril(torch.ones(d_sources, d_sources), -2).bool()).float().tril() + torch.bernoulli(
+                dag_mask_prob * torch.ones(d_sources,
+                                           d_sources))).bool().float()
+        ).numpy()
+
+        # make it a chain
+        if chain:
+            adjacency = np.tril(adjacency.T, k=1).T
+
+        print(f"{adjacency=}")
+
+        # as the inverse map encodes the direct edges, we need to invert for the DGP
+        # adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
+
     # Mixing time!
     if not repeat_linearity:
         X = S.copy()
         for nl in range(n_layers):
-            A = generate_mixing_matrix(X.shape[1], d_data if obs_mixing_layers is None else X.shape[1], lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
+            A = generate_mixing_matrix(X.shape[1], d_data if obs_mixing_layers is None else X.shape[1],
+                                       lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype,
                                        staircase=staircase)
             if use_sem:
                 if n_layers == 1:
                     # the transpose is needed due to the dot product used below
-                    A = np.tril(A).T
-                    if chain:
-                        A = np.linalg.inv(np.tril(A, k=1))
+                    A = (A*adjacency).T
 
                     print(f"{np.linalg.det(A)=}")
                     X = act_f(np.dot(S, A)).astype(float)
 
-                    # T needed to get lower triangular
-                    # inv needed as the StrNN is the inference model
-                    adjacency = np.linalg.inv(A).T.astype(bool).astype(float)
+
                 else:
 
-                    if adjacency is None:
-                        adjacency = torch.tril(
-                            (torch.bitwise_not(torch.tril(torch.ones(X.shape[1],X.shape[1]), -2).bool()).float().tril() + torch.bernoulli(
-                                dag_mask_prob * torch.ones(X.shape[1],
-                                                           X.shape[
-                                                               1]))).bool().float()
-                        ).numpy()
-
-                        # make it a chain
-                        if chain:
-                            adjacency = np.tril(adjacency.T, k=1).T
-
-
-                        print(f"{adjacency=}")
-
-                        adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
-
-
-
                     sem = StrNN(
-                        nin=X.shape[1],
+                        nin=d_sources,
                         hidden_sizes=(tuple([
-                            10 * X.shape[1] for _ in range(n_layers)
+                            10 * d_sources for _ in range(n_layers)
                         ])),
-                        nout=X.shape[1],
+                        nout=d_sources,
                         opt_type="greedy",
                         adjacency=adjacency,
                         activation="leaky_relu",
@@ -322,42 +318,25 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
     else:
         # assert n_layers > 1  # suppose we always have at least 2 layers. The last layer doesn't have a non-linearity
-        A = generate_mixing_matrix(d_sources, d_data if obs_mixing_layers is None else d_sources, lin_type=lin_type, n_iter_4_cond=n_iter_4_cond, dtype=dtype)
+        A = generate_mixing_matrix(d_sources, d_data if obs_mixing_layers is None else d_sources, lin_type=lin_type,
+                                   n_iter_4_cond=n_iter_4_cond, dtype=dtype)
         if use_sem:
-            A = np.abs(A)
+
 
             if n_layers == 1:
                 # the transpose is needed due to the dot product used below
                 # Note: adding a diagonal term is to increase the abs-determinant (otherwise teh problem is ill-conditioned_
-                A = np.tril(A).T + np.abs(np.random.randn(*A.shape).diagonal()) * np.eye(A.shape[0])
+                A = A / np.power(np.abs(np.linalg.det(A)), 1./d_sources)
+                A = np.tril(np.linalg.inv(A*adjacency)).T #+ np.abs(np.random.randn(*A.shape).diagonal()) * np.eye(A.shape[0])
 
-                if chain:
-                    A = np.linalg.inv(np.tril(A, k=1))
+                A = A / np.power(np.abs(np.linalg.det(A)), 1. / d_sources)
+
+                # A = (A*adjacency).T  + np.abs(np.random.randn(*A.shape).diagonal()) * np.eye(A.shape[0])
 
                 print(f"{np.linalg.det(A)=}")
                 X = act_f(np.dot(S, A)).astype(float)
 
-                # T needed to get lower triangular
-                # inv needed as the StrNN is the inference model
-                adjacency = np.linalg.inv(A).T.astype(bool).astype(float)
             else:
-
-                if adjacency is None:
-
-                    adjacency = torch.tril(
-                        (torch.bitwise_not(
-                            torch.tril(torch.ones(d_sources, d_sources), -2).bool()).float().tril() + torch.bernoulli(
-                            dag_mask_prob * torch.ones(d_sources,
-                                                       d_sources))).bool().float()
-                    ).numpy()
-
-                    # make it a chain
-                    if chain:
-                        adjacency = np.tril(adjacency.T, k=1).T
-
-                    print(f"{adjacency=}")
-                    adjacency = np.linalg.inv(adjacency).astype(bool).astype(float)
-
 
                 sem = StrNN(
                     nin=d_sources,
@@ -382,7 +361,6 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
             else:
                 B = A
 
-
             for nl in range(1, n_layers):
                 if nl == n_layers - 1:
                     X = np.dot(X, B)
@@ -403,7 +381,7 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
         for _ in range(obs_mixing_layers - 1):
             obs_mixing.append(
-                nn.Linear(d_data,d_data, bias=False)
+                nn.Linear(d_data, d_data, bias=False)
             )
             nn.init.orthogonal_(obs_mixing[-1].weight.data)
 
@@ -415,7 +393,6 @@ def generate_data(n_per_seg, n_seg, d_sources, d_data=None, n_layers=3, prior='g
 
         with torch.no_grad():
             X = obs_mixing(torch.from_numpy(X).float()).numpy()
-
 
     # add noise:
     if float(noisy) != 0:
@@ -511,7 +488,8 @@ class SyntheticDataset(Dataset):
     @staticmethod
     def load_tcl_data(root, n_per_seg, n_seg, d_sources, d_data, num_layers, seed, prior, activation_fn, uncentered,
                       noisy, centers, one_hot_labels,
-                      use_sem=False, chain=False, staircase=False, adjacency=None, dag_mask_prob=0.65, obs_mixing_layers=None):
+                      use_sem=False, chain=False, staircase=False, adjacency=None, dag_mask_prob=0.65,
+                      obs_mixing_layers=None):
         path_to_dataset = root + 'tcl_' + '_'.join(
             [str(n_per_seg), str(n_seg), str(d_sources), str(d_data), str(num_layers), str(seed), prior, activation_fn])
         if uncentered:
@@ -525,7 +503,7 @@ class SyntheticDataset(Dataset):
             if num_layers > 1:
                 path_to_dataset += '_strnn'
                 if dag_mask_prob < 1:
-                    path_to_dataset += f'_dag_{int(100*dag_mask_prob)}'
+                    path_to_dataset += f'_dag_{int(100 * dag_mask_prob)}'
         if chain:
             path_to_dataset += '_chain'
 
@@ -543,7 +521,8 @@ class SyntheticDataset(Dataset):
                       "noisy": noisy,
                       "centers": centers, "repeat_linearity": True, "one_hot_labels": one_hot_labels,
                       "use_sem": use_sem,
-                      "chain": chain, "staircase": staircase, "adjacency": adjacency, "dag_mask_prob": dag_mask_prob, "obs_mixing_layers": obs_mixing_layers}
+                      "chain": chain, "staircase": staircase, "adjacency": adjacency, "dag_mask_prob": dag_mask_prob,
+                      "obs_mixing_layers": obs_mixing_layers}
             save_data(path_to_dataset, **kwargs)
         print('loading data from {}'.format(path_to_dataset))
         return np.load(path_to_dataset)
