@@ -8,6 +8,7 @@ from metrics import mean_corr_coef as mcc
 from models import cleanIVAE, cleanVAE, Discriminator, permute_dims
 from torch import optim
 from torch.utils.data import DataLoader
+import numpy as np
 
 
 def runner(args, config, verbose=False):
@@ -116,11 +117,15 @@ def runner(args, config, verbose=False):
             loss.backward(retain_graph=factor)
 
             train_loss += loss.item()
+
+
             try:
                 perf = mcc(s_true.numpy(), s.cpu().detach().numpy())
             except:
                 perf = 0
             train_perf += perf
+
+
 
             try:
                 perf = mcc(z_true.numpy(), z.cpu().detach().numpy())
@@ -128,6 +133,8 @@ def runner(args, config, verbose=False):
                 perf = 0
             train_perf_z += perf
 
+            if np.isnan(train_loss):
+                break
             optimizer.step()
 
             if factor:
@@ -153,8 +160,8 @@ def runner(args, config, verbose=False):
             print('==> Epoch {}/{}:\ttrain loss: {:.6f}\ttrain perf: {:.6f}'.format(epoch, config.epochs, train_loss,
                                                                                     train_perf))
 
-        # if torch.isnan(train_loss):
-        #     break
+        if np.isnan(train_loss):
+            break
 
         if wandb.run:
             wandb.log({'train_loss': train_loss, 'train_mcc': train_perf})
