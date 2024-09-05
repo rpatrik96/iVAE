@@ -1,13 +1,12 @@
 import argparse
 import os
 import pickle
-import sys
 
 import numpy as np
 import torch
 import yaml
-import wandb
 
+import wandb
 from runners import ivae_runner, tcl_runner
 
 
@@ -22,6 +21,7 @@ def parse():
     parser.add_argument('--seed', type=int, default=0, help='Random seed')
 
     parser.add_argument('--sweep', action='store_true')
+    parser.add_argument('--sweep-id', type=str, default='', help='sweep ID')
 
     return parser.parse_args()
 
@@ -60,7 +60,6 @@ def main():
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-
     if new_config.tcl:
         print("Running TCL")
         r = tcl_runner(args, new_config)
@@ -68,17 +67,14 @@ def main():
         print("Running iVAE")
         r = ivae_runner(args, new_config)
 
-
     # r = clean_vae_runner(args, new_config)
     fname = os.path.join(args.run,
                          '_'.join([os.path.splitext(args.config)[0], str(args.seed), str(args.n_sims)]) + '.p')
     pickle.dump(r, open(fname, "wb"))
 
+
 def main_sweep():
-
-
     run = wandb.init()
-
 
     wandb.config["device"] = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -92,6 +88,7 @@ def main_sweep():
         print("Running iVAE")
         r = ivae_runner(args, wandb.config)
 
+
 if __name__ == '__main__':
 
     args = parse()
@@ -104,8 +101,10 @@ if __name__ == '__main__':
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), f"configs/{args.config}")) as file:
             config = yaml.load(file, Loader=yaml.FullLoader)
 
+        if args.sweep_id == '':
+            sweep_id = wandb.sweep(config, project="ivae")
+        else:
+            sweep_id = args.sweep_id
 
-        # sweep_id = wandb.sweep(config, project="ivae")
-        sweep_id = "1pccuxls"
 
         wandb.agent(sweep_id, function=main_sweep, project="ivae")
