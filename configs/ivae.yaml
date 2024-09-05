@@ -1,19 +1,19 @@
 # dataset
 num_per_segment: 1000
-num_segments: 16  # -> for a small amount of segments, StrNN seem to work better
+num_segments: 6 # -> for a small amount of segments, StrNN seem to work better
 source_dim: 5
 data_dim: 8
-nl: 2
+nl: 1
 data_seed: 1
 prior: 'gauss'
 act: 'xtanh'
 uncentered: true
 noisy: false
 staircase: false
-one_hot_labels: false
+one_hot_labels: true
 chain: false
 use_sem: true
-dag_mask_prob: .05
+dag_mask_prob: .5
 obs_mixing_layers: 2
 
 # IVAE with STRNNs work better (3+3 layers) vs vanilla iVAE w/ 5
@@ -25,9 +25,9 @@ obs_mixing_layers: 2
 # model args
 n_layers: 2
 aux_net_layers: 3
-strnn_layers: 2
-obs_layers: 3
-strnn_width: 40
+strnn_layers: 1
+obs_layers: 2
+strnn_width: 100
 hidden_dim: 100
 activation: 'xtanh'
 ica: true
@@ -39,7 +39,7 @@ cond_strnn: false
 strnn_adjacency_override: false
 separate_aux: true
 residual_aux: false
-ignore_u: false
+ignore_u: true
 seed: 42
 
 # learning

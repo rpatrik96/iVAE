@@ -21,7 +21,7 @@ parameters:
   data_dim:
     value: 8
   nl:
-    value: 2
+    value: 1
   obs_mixing_layers:
     value: 2
   data_seed:
@@ -43,7 +43,7 @@ parameters:
   chain:
     value: false
   dag_mask_prob:
-    values: [.2, .5, .8]
+    value: .5
   data_path:
     value: 'run/datasets/'
   # model args
@@ -52,9 +52,9 @@ parameters:
   aux_net_layers:
     value: 3
   strnn_layers:
-    value: 3
+    value: 2
   obs_layers:
-    value: 3
+    value: 2
   hidden_dim:
     value: 100
   strnn_width:
@@ -72,9 +72,9 @@ parameters:
   tcl:
     value: false
   use_strnn:
-    values: [true, false]
+    value: true
   strnn_adjacency_override:
-    value: false
+    value: true
   cond_strnn:
     value: false
   separate_aux:
